@@ -1,0 +1,131 @@
+{
+  "templateId": "professional-two-column",
+  "layoutOptions": {
+    "fontSizeStep": 1,
+    "pageMargin": "standard",
+    "bodyLineHeight": "normal"
+  },
+  "basics": {
+    "fullName": "林晓晨",
+    "email": "xiachen.lin@example.com",
+    "phone": "+86 139 0000 1234",
+    "location": "上海 · 可远程",
+    "headline": "高级前端工程师 · Vue / TypeScript",
+    "summary": "8 年 Web 前端经验，擅长中大型 B 端控制台、可视化与性能优化。主导过设计系统落地、微前端拆分与 CI 可视化质量门禁。习惯与产品、设计、后端紧密协作，推动可度量交付（Core Web Vitals、错误率、构建时长）。"
+  },
+  "basicsSensitive": {
+    "fullName": false,
+    "email": true,
+    "phone": true,
+    "location": false,
+    "headline": false,
+    "summary": false
+  },
+  "sections": [
+    {
+      "id": "sec-exp",
+      "type": "experience",
+      "title": "工作经历",
+      "order": 0,
+      "items": [
+        {
+          "id": "exp-current",
+          "title": "某互联网 · 高级前端工程师 · 2021—至今",
+          "bullets": [
+            "负责核心业务控制台与简历 SaaS 子域，技术栈 Vue 3 + Vite + Pinia，统一组件库与主题变量，页面首屏 LCP 降低约 35%。",
+            "搭建 Playwright + Vitest 分层测试与 PR 预览环境，关键路径回归从人工 2h 缩短为流水线约 15min。",
+            "推动 RFC 流程与 Storybook 文档化，减少跨团队沟通返工；参与招聘与校招导师。"
+          ],
+          "titleSensitive": false,
+          "bulletSensitive": [false, false, false]
+        },
+        {
+          "id": "exp-prev",
+          "title": "某金融科技 · 前端开发 · 2017—2021",
+          "bullets": [
+            "交易风控看板与实时行情页，WebSocket 重连与节流、虚拟列表优化万级行渲染。",
+            "与后端约定 OpenAPI 生成 TypeScript SDK，减少联调字段错位问题。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-proj",
+      "type": "project",
+      "title": "代表项目",
+      "order": 1,
+      "items": [
+        {
+          "id": "proj-design-system",
+          "title": "公司级设计系统 1.x—2.x 迁移",
+          "bullets": [
+            "Tokens + CSS 变量 + 无障碍对比度校验；兼容旧业务渐进升级，零停机切换主题。",
+            "提供 Figma 插件与 CLI 校验 token 漂移，设计—开发对齐周期缩短。"
+          ]
+        },
+        {
+          "id": "proj-micro-fe",
+          "title": "微前端壳子与子应用治理",
+          "bullets": [
+            "基于 Module Federation 拆分运营、计费子域，统一登录态与埋点上下文注入。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-skill",
+      "type": "skill",
+      "title": "技能栈",
+      "order": 2,
+      "items": [
+        {
+          "id": "skill-fe",
+          "title": "前端",
+          "bullets": [
+            "Vue 3 / React（维护性项目）、TypeScript、Vite、Webpack、pnpm monorepo",
+            "性能：Lighthouse、Chrome Performance、代码分割、预加载策略",
+            "测试：Vitest、Testing Library、Playwright、MSW"
+          ]
+        },
+        {
+          "id": "skill-collab",
+          "title": "协作与工程化",
+          "bullets": [
+            "GitHub Actions / GitLab CI、Conventional Commits、Changesets、Sentry"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-edu",
+      "type": "education",
+      "title": "教育背景",
+      "order": 3,
+      "items": [
+        {
+          "id": "edu-master",
+          "title": "某大学 · 软件工程硕士 · 2014—2017",
+          "bullets": [
+            "研究方向：人机交互与 Web 可视化；校级优秀毕业论文。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-custom",
+      "type": "custom",
+      "title": "社区与语言",
+      "order": 4,
+      "items": [
+        {
+          "id": "custom-community",
+          "title": "",
+          "bullets": [
+            "技术博客与开源小工具维护；偶尔在 meetup 分享性能与可访问性实践。",
+            "英语：工作邮件与文档读写流利；可参与英文站会。"
+          ]
+        }
+      ]
+    }
+  ]
+}

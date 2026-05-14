@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simple-resume.local/schemas/resume-document.json",
+  "title": "ResumeDocument",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "templateId",
+    "layoutOptions",
+    "basics",
+    "sections"
+  ],
+  "properties": {
+    "templateId": {
+      "type": "string",
+      "enum": ["classic-list", "professional-two-column"],
+      "description": "预览模板 ID；读库宽松解析时非法值会回落为 classic-list"
+    },
+    "layoutOptions": {
+      "$ref": "#/$defs/ResumeLayoutOptions"
+    },
+    "basics": {
+      "$ref": "#/$defs/ResumeDocumentBasics"
+    },
+    "sections": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/ResumeModule" }
+    },
+    "basicsSensitive": {
+      "$ref": "#/$defs/ResumeBasicsSensitiveMap"
+    }
+  },
+  "$defs": {
+    "ResumeLayoutOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fontSizeStep", "pageMargin", "bodyLineHeight"],
+      "properties": {
+        "fontSizeStep": {
+          "type": "integer",
+          "enum": [0, 1, 2],
+          "description": "正文字体档位"
+        },
+        "pageMargin": {
+          "type": "string",
+          "enum": ["compact", "standard"]
+        },
+        "bodyLineHeight": {
+          "type": "string",
+          "enum": ["tight", "normal", "relaxed"]
+        }
+      }
+    },
+    "ResumeDocumentBasics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fullName",
+        "email",
+        "phone",
+        "location",
+        "headline",
+        "summary"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "PATCH 严格：trim 后至少 1 字符"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 254,
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[+()\\d\\s\\-]{1,40}$",
+          "description": "PATCH 严格：trim 后至少 1 字符，且需匹配项目内 phone 规则"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "ResumeBasicsSensitiveMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fullName": { "type": "boolean" },
+        "email": { "type": "boolean" },
+        "phone": { "type": "boolean" },
+        "location": { "type": "boolean" },
+        "headline": { "type": "boolean" },
+        "summary": { "type": "boolean" }
+      },
+      "description": "字段级敏感标记；可省略整个对象"
+    },
+    "ResumeModuleType": {
+      "type": "string",
+      "enum": ["experience", "education", "project", "skill", "custom"]
+    },
+    "ResumeSectionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "bullets"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "trim 后非空"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "bullets": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "default": []
+        },
+        "titleSensitive": { "type": "boolean" },
+        "bulletSensitive": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "type": "boolean" }
+        }
+      }
+    },
+    "ResumeModule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "items", "order"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": { "$ref": "#/$defs/ResumeModuleType" },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/ResumeSectionItem" }
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

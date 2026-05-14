@@ -1,0 +1,105 @@
+{
+  "templateId": "classic-list",
+  "layoutOptions": {
+    "fontSizeStep": 2,
+    "pageMargin": "compact",
+    "bodyLineHeight": "relaxed"
+  },
+  "basics": {
+    "fullName": "周远舟",
+    "email": "yuanzhou.zhou@example.com",
+    "phone": "",
+    "location": "杭州",
+    "headline": "后端工程师 / SRE 倾向 · Go · 分布式系统",
+    "summary": "6 年服务端与基础设施经验，聚焦高可用 API、数据一致性与可观测性。负责过订单与支付域核心链路、消息驱动架构与多活演练。熟悉 Kubernetes 与 GitOps 发布，能在业务压力与工程债务之间做权衡并落地可验证的 SLO。"
+  },
+  "basicsSensitive": {
+    "fullName": false,
+    "email": false,
+    "phone": false,
+    "location": false,
+    "headline": false,
+    "summary": false
+  },
+  "sections": [
+    {
+      "id": "sec-exp-be",
+      "type": "experience",
+      "title": "工作经历",
+      "order": 0,
+      "items": [
+        {
+          "id": "exp-be-current",
+          "title": "某电商平台 · 资深后端工程师 · 2020—至今",
+          "bullets": [
+            "订单与库存域：基于 Go 的微服务，Outbox + 事务消息保证最终一致；峰值 QPS 扩容与热点 key 治理。",
+            "推动 OpenTelemetry 全链路追踪与 RED 指标看板，P99 延迟告警与根因定位时间显著缩短。",
+            "参与双活演练与混沌工程，完善熔断、限流、降级策略与运行手册。"
+          ]
+        },
+        {
+          "id": "exp-be-prev",
+          "title": "某云服务 · 后端开发 · 2017—2020",
+          "bullets": [
+            "多租户计费管道：Kafka 消费者组、幂等键与死信队列设计；PostgreSQL 分区表与慢查询治理。",
+            "内部 API 网关插件（鉴权、审计日志）与 gRPC 服务模板脚手架。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-proj-be",
+      "type": "project",
+      "title": "项目亮点",
+      "order": 1,
+      "items": [
+        {
+          "id": "proj-idempotency",
+          "title": "支付回调幂等与对账平台",
+          "bullets": [
+            "统一幂等键存储、状态机与对账任务调度；与财务系统 T+1 对账差异自动工单。",
+            "关键路径单元测试 + 集成测试覆盖，上线后未发生重大重复记账事故。"
+          ],
+          "titleSensitive": false,
+          "bulletSensitive": [false, true]
+        }
+      ]
+    },
+    {
+      "id": "sec-skill-be",
+      "type": "skill",
+      "title": "技能",
+      "order": 2,
+      "items": [
+        {
+          "id": "skill-lang-runtime",
+          "title": "语言与运行时",
+          "bullets": [
+            "Go（主力）、少量 Java 维护；熟悉 goroutine、channel、context 取消语义。"
+          ]
+        },
+        {
+          "id": "skill-data-infra",
+          "title": "数据与基础设施",
+          "bullets": [
+            "PostgreSQL、Redis、Kafka / RabbitMQ；Kubernetes、Helm、Prometheus、Grafana、Loki。",
+            "Terraform 管理云资源；GitHub Actions / Argo CD 发布流水线。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-edu-be",
+      "type": "education",
+      "title": "教育",
+      "order": 3,
+      "items": [
+        {
+          "id": "edu-bachelor",
+          "title": "某理工大学 · 计算机科学与技术 · 本科 · 2013—2017",
+          "bullets": []
+        }
+      ]
+    }
+  ]
+}

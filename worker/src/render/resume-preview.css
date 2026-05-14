@@ -1,0 +1,264 @@
+/**
+ * Preview-only styles: isolate resume reading typography from editor shell (Tailwind utilities).
+ * Imported by ResumePreview.vue root.
+ * PDF 导出应复用同一 layoutOptions 语义；屏幕预览用容器 padding 模拟页边距。
+ */
+.resume-preview-shell {
+  overflow: clip;
+}
+
+.resume-preview-basics {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 2px solid color-mix(in srgb, var(--resume-preview-text) 14%, transparent);
+}
+
+.resume-preview-basics-name {
+  margin: 0 0 0.15rem;
+  font-size: calc(var(--resume-preview-font-size) * 1.25);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.resume-preview-basics-headline {
+  margin: 0 0 0.35rem;
+  color: var(--resume-preview-muted);
+  font-size: calc(var(--resume-preview-font-size) * 1.02);
+}
+
+.resume-preview-basics-contact {
+  margin: 0;
+  color: var(--resume-preview-muted);
+  font-size: calc(var(--resume-preview-font-size) * 0.96);
+}
+
+.resume-preview-basics-summary {
+  margin: 0.5rem 0 0;
+}
+
+.resume-preview-basics-placeholder {
+  margin: 0;
+  color: var(--resume-preview-muted);
+  font-size: calc(var(--resume-preview-font-size) * 0.96);
+}
+
+.resume-preview-root {
+  --resume-preview-text: var(--color-sketch-ink, #1a1a1a);
+  --resume-preview-muted: var(--color-sketch-muted, #5c5c5c);
+  --resume-preview-font-size: 0.875rem;
+  --resume-preview-gutter: 0.75rem;
+  --resume-preview-line-height: 1.5;
+  color: var(--resume-preview-text);
+  font-size: var(--resume-preview-font-size);
+  line-height: var(--resume-preview-line-height);
+  padding: var(--resume-preview-gutter);
+  overflow-wrap: anywhere;
+  width: 210mm;
+  min-height: 297mm;
+}
+
+.resume-preview-root--fs-0 {
+  --resume-preview-font-size: 0.8125rem;
+}
+
+.resume-preview-root--fs-1 {
+  --resume-preview-font-size: 0.875rem;
+}
+
+.resume-preview-root--fs-2 {
+  --resume-preview-font-size: 1rem;
+}
+
+.resume-preview-root--margin-compact {
+  --resume-preview-gutter: 0.5rem;
+}
+
+.resume-preview-root--margin-standard {
+  --resume-preview-gutter: 0.75rem;
+}
+
+.resume-preview-root--lh-tight {
+  --resume-preview-line-height: 1.35;
+}
+
+.resume-preview-root--lh-normal {
+  --resume-preview-line-height: 1.5;
+}
+
+.resume-preview-root--lh-relaxed {
+  --resume-preview-line-height: 1.65;
+}
+
+.resume-preview-root .resume-preview-module-title {
+  font-size: calc(var(--resume-preview-font-size) * 1.06);
+  line-height: 1.35;
+  margin-bottom: 0.2rem;
+}
+
+.resume-preview-root .resume-preview-item-title {
+  line-height: var(--resume-preview-line-height);
+}
+
+.resume-preview-root .resume-preview-module-list {
+  margin: 0.35rem 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.resume-preview-root .resume-preview-module-list > li {
+  margin-bottom: 0.5rem;
+}
+
+.resume-preview-module-details {
+  border-radius: var(--radius-sketch-sm, 0.5rem);
+  border: 2px solid color-mix(in srgb, var(--resume-preview-text) 18%, transparent);
+  background: color-mix(in srgb, var(--resume-preview-text) 3%, transparent);
+}
+
+.resume-preview-module-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  font-size: calc(var(--resume-preview-font-size) * 1.06);
+  line-height: 1.35;
+  user-select: none;
+}
+
+.resume-preview-module-summary::-webkit-details-marker {
+  display: none;
+}
+
+.resume-preview-module-summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-right: 2px solid var(--resume-preview-text);
+  border-bottom: 2px solid var(--resume-preview-text);
+  transform: rotate(-45deg);
+  margin-top: -0.1rem;
+  transition: transform 0.15s ease;
+}
+
+.resume-preview-module-details[open] .resume-preview-module-summary::before {
+  transform: rotate(45deg);
+  margin-top: 0.05rem;
+}
+
+.resume-preview-module-summary-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+
+.resume-preview-module-type {
+  font-weight: 600;
+  font-size: calc(var(--resume-preview-font-size) * 0.88);
+  color: var(--resume-preview-muted);
+}
+
+.resume-preview-module-body {
+  padding: 0 0.55rem 0.55rem;
+  border-top: 1px solid color-mix(in srgb, var(--resume-preview-text) 10%, transparent);
+}
+
+.resume-preview-root .resume-preview-item-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  list-style-type: decimal;
+}
+
+.resume-preview-root .resume-preview-bullet-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+/* professional-two-column：双栏卡片感，与 classic 单列列表区分 */
+.resume-preview-root--professional-two-column .resume-preview-module-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--resume-preview-gutter) + 0.15rem) 1rem;
+  list-style: none;
+  padding-left: 0;
+}
+
+.resume-preview-root--professional-two-column .resume-preview-module-list > li {
+  margin-bottom: 0;
+}
+
+/* 屏幕预览：模块为 details 卡片；PDF 导出仍为 li > p.module-title + ol */
+.resume-preview-root--professional-two-column
+  .resume-preview-module-list
+  > li:has(.resume-preview-module-details) {
+  padding-left: 0;
+  border-left: none;
+}
+
+.resume-preview-root--professional-two-column .resume-preview-module-details {
+  border-left: 3px solid var(--resume-preview-muted);
+}
+
+.resume-preview-root--professional-two-column
+  .resume-preview-module-list
+  > li:not(:has(.resume-preview-module-details)) {
+  border-left: 3px solid var(--resume-preview-muted);
+  padding-left: 0.75rem;
+}
+
+@media (max-width: 420px) {
+  .resume-preview-root--professional-two-column .resume-preview-module-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Markdown fragments (basics summary + item bullets) */
+.rp-md {
+  min-width: 0;
+}
+.rp-md p {
+  margin: 0 0 0.35em;
+}
+.rp-md p:last-child {
+  margin-bottom: 0;
+}
+.rp-md ul,
+.rp-md ol {
+  margin: 0.25em 0 0.35em;
+  padding-left: 1.15em;
+}
+.rp-md li {
+  margin: 0.12em 0;
+}
+.rp-md code {
+  font-size: 0.92em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.2em;
+  background: color-mix(in srgb, var(--resume-preview-text) 6%, transparent);
+}
+.rp-md pre {
+  margin: 0.35em 0;
+  font-size: 0.9em;
+  overflow: auto;
+}
+.rp-md pre code {
+  padding: 0;
+  background: transparent;
+}
+.rp-md a {
+  color: #2563eb;
+  word-break: break-word;
+}
+.rp-md blockquote {
+  margin: 0.35em 0;
+  padding-left: 0.65em;
+  border-left: 2px solid color-mix(in srgb, var(--resume-preview-text) 18%, transparent);
+  color: var(--resume-preview-muted);
+}
