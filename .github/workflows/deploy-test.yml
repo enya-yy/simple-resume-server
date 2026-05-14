@@ -1,0 +1,99 @@
+name: deploy-test-server
+
+on:
+  workflow_dispatch:
+
+env:
+  TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST || '81.70.167.194' }}
+  TEST_SSH_USER: ${{ vars.TEST_SSH_USER || 'ubuntu' }}
+  TEST_SSH_PORT: ${{ vars.TEST_SSH_PORT || '22' }}
+  TEST_SERVER_DIR: ${{ vars.TEST_SERVER_DIR || '/home/ubuntu/projects/simple-resume/server' }}
+  TEST_PM2_API_NAME: ${{ vars.TEST_PM2_API_NAME || 'simple-resume-api' }}
+  TEST_PM2_WORKER_NAME: ${{ vars.TEST_PM2_WORKER_NAME || 'simple-resume-worker' }}
+
+jobs:
+  deploy-server:
+    name: deploy server to test server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH deployment tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync sshpass
+
+      - name: Validate deployment configuration
+        env:
+          SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
+        run: |
+          if [ -z "${SSHPASS:-}" ]; then
+            echo "Missing required GitHub secret: TEST_SSH_PASSWORD"
+            exit 1
+          fi
+
+      - name: Prepare remote server directory
+        env:
+          SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
+        run: |
+          sshpass -e ssh \
+            -p "$TEST_SSH_PORT" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "mkdir -p '$TEST_SERVER_DIR'"
+
+      - name: Sync server source
+        env:
+          SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
+        run: |
+          sshpass -e rsync -az --delete \
+            -e "ssh -p $TEST_SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            --exclude='.env' \
+            --exclude='*.env' \
+            --exclude='node_modules/' \
+            --exclude='dist/' \
+            --exclude='coverage/' \
+            --exclude='data/' \
+            --exclude='.DS_Store' \
+            ./ "$TEST_SSH_USER@$TEST_SSH_HOST:$TEST_SERVER_DIR/"
+
+      - name: Build and reload server on test server
+        env:
+          SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
+        run: |
+          sshpass -e ssh \
+            -p "$TEST_SSH_PORT" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          if ! command -v pnpm >/dev/null 2>&1; then
+            corepack enable
+            corepack prepare pnpm@10.33.0 --activate
+          fi
+
+          if ! command -v pm2 >/dev/null 2>&1; then
+            echo "pm2 is required on the test server but was not found in PATH."
+            exit 1
+          fi
+
+          cd "$TEST_SERVER_DIR"
+          pnpm --dir packages/sqlite-pg install --frozen-lockfile
+          pnpm install --frozen-lockfile
+          pnpm --dir worker install --frozen-lockfile
+          pnpm --dir packages/sqlite-pg build
+          pnpm build
+          pnpm migrate
+
+          cd "$TEST_SERVER_DIR/worker"
+          pnpm build
+
+          pm2 reload "$TEST_PM2_API_NAME" --update-env || pm2 restart "$TEST_PM2_API_NAME" --update-env
+          pm2 reload "$TEST_PM2_WORKER_NAME" --update-env || pm2 restart "$TEST_PM2_WORKER_NAME" --update-env
+          REMOTE_SCRIPT
