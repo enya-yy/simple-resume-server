@@ -107,9 +107,12 @@ jobs:
 
           cd "$TEST_SERVER_DIR"
           pnpm_cmd --dir packages/sqlite-pg install --frozen-lockfile
+          pnpm_cmd --dir packages/sqlite-pg rebuild --pending
           pnpm_cmd --dir packages/sqlite-pg build
           pnpm_cmd install --frozen-lockfile
+          pnpm_cmd rebuild --pending
           pnpm_cmd --dir worker install --frozen-lockfile
+          pnpm_cmd --dir worker rebuild --pending
           pnpm_cmd build
           pnpm_cmd migrate
 
