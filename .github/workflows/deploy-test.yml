@@ -96,8 +96,9 @@ jobs:
             "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
 
-          corepack enable
-          corepack prepare pnpm@10.33.0 --activate
+          pnpm_cmd() {
+            corepack pnpm@10.33.0 "$@"
+          }
 
           if ! command -v pm2 >/dev/null 2>&1; then
             echo "pm2 is required on the test server but was not found in PATH."
@@ -105,15 +106,15 @@ jobs:
           fi
 
           cd "$TEST_SERVER_DIR"
-          pnpm --dir packages/sqlite-pg install --frozen-lockfile
-          pnpm --dir packages/sqlite-pg build
-          pnpm install --frozen-lockfile
-          pnpm --dir worker install --frozen-lockfile
-          pnpm build
-          pnpm migrate
+          pnpm_cmd --dir packages/sqlite-pg install --frozen-lockfile
+          pnpm_cmd --dir packages/sqlite-pg build
+          pnpm_cmd install --frozen-lockfile
+          pnpm_cmd --dir worker install --frozen-lockfile
+          pnpm_cmd build
+          pnpm_cmd migrate
 
           cd "$TEST_SERVER_DIR/worker"
-          pnpm build
+          pnpm_cmd build
 
           pm2 reload "$TEST_PM2_API_NAME" --update-env || pm2 restart "$TEST_PM2_API_NAME" --update-env
           pm2 reload "$TEST_PM2_WORKER_NAME" --update-env || pm2 restart "$TEST_PM2_WORKER_NAME" --update-env
