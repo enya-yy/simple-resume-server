@@ -44,14 +44,37 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
-            "mkdir -p '$TEST_SERVER_DIR'"
+            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_SSH_USER='$TEST_SSH_USER' bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          if ! mkdir -p "$TEST_SERVER_DIR" 2>/dev/null; then
+            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              sudo -n mkdir -p "$TEST_SERVER_DIR"
+            else
+              echo "Cannot create $TEST_SERVER_DIR as $(whoami), and passwordless sudo is unavailable."
+              exit 1
+            fi
+          fi
+
+          if [ ! -w "$TEST_SERVER_DIR" ]; then
+            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              remote_group="$(id -gn "$TEST_SSH_USER")"
+              sudo -n chown -R "$TEST_SSH_USER:$remote_group" "$TEST_SERVER_DIR"
+            else
+              echo "$TEST_SERVER_DIR is not writable by $(whoami). Run: sudo chown -R $TEST_SSH_USER:$(id -gn "$TEST_SSH_USER") $TEST_SERVER_DIR"
+              exit 1
+            fi
+          fi
+          REMOTE_SCRIPT
 
       - name: Sync server source
         env:
           SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
         run: |
-          sshpass -e rsync -az --delete \
+          sshpass -e rsync -az --delete --no-owner --no-group --no-perms \
             -e "ssh -p $TEST_SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            --exclude='.git/' \
+            --exclude='.github/' \
             --exclude='.env' \
             --exclude='*.env' \
             --exclude='node_modules/' \
