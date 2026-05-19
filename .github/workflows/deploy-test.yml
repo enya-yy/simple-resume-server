@@ -10,6 +10,7 @@ env:
   TEST_SERVER_DIR: ${{ vars.TEST_SERVER_DIR || '/home/ubuntu/projects/simple-resume/server' }}
   TEST_PM2_API_NAME: ${{ vars.TEST_PM2_API_NAME || 'simple-resume-api' }}
   TEST_PM2_WORKER_NAME: ${{ vars.TEST_PM2_WORKER_NAME || 'simple-resume-worker' }}
+  TEST_SQLITE_DATABASE_PATH: ${{ vars.TEST_SQLITE_DATABASE_PATH || '/home/ubuntu/projects/simple-resume/db/simple-resume.db' }}
   TEST_SSH_OPTIONS: >-
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
@@ -49,27 +50,31 @@ jobs:
             -p "$TEST_SSH_PORT" \
             $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
-            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_SSH_USER='$TEST_SSH_USER' bash -s" <<'REMOTE_SCRIPT'
+            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_SQLITE_DATABASE_PATH='$TEST_SQLITE_DATABASE_PATH' TEST_SSH_USER='$TEST_SSH_USER' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
 
-          if ! mkdir -p "$TEST_SERVER_DIR" 2>/dev/null; then
+          sqlite_db_dir="$(dirname "$TEST_SQLITE_DATABASE_PATH")"
+
+          if ! mkdir -p "$TEST_SERVER_DIR" "$sqlite_db_dir" 2>/dev/null; then
             if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-              sudo -n mkdir -p "$TEST_SERVER_DIR"
+              sudo -n mkdir -p "$TEST_SERVER_DIR" "$sqlite_db_dir"
             else
-              echo "Cannot create $TEST_SERVER_DIR as $(whoami), and passwordless sudo is unavailable."
+              echo "Cannot create $TEST_SERVER_DIR or $sqlite_db_dir as $(whoami), and passwordless sudo is unavailable."
               exit 1
             fi
           fi
 
-          if [ ! -w "$TEST_SERVER_DIR" ]; then
-            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-              remote_group="$(id -gn "$TEST_SSH_USER")"
-              sudo -n chown -R "$TEST_SSH_USER:$remote_group" "$TEST_SERVER_DIR"
-            else
-              echo "$TEST_SERVER_DIR is not writable by $(whoami). Run: sudo chown -R $TEST_SSH_USER:$(id -gn "$TEST_SSH_USER") $TEST_SERVER_DIR"
-              exit 1
+          for dir in "$TEST_SERVER_DIR" "$sqlite_db_dir"; do
+            if [ ! -w "$dir" ]; then
+              if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                remote_group="$(id -gn "$TEST_SSH_USER")"
+                sudo -n chown -R "$TEST_SSH_USER:$remote_group" "$dir"
+              else
+                echo "$dir is not writable by $(whoami). Run: sudo chown -R $TEST_SSH_USER:$(id -gn "$TEST_SSH_USER") $dir"
+                exit 1
+              fi
             fi
-          fi
+          done
           REMOTE_SCRIPT
 
       - name: Sync server source
@@ -97,8 +102,11 @@ jobs:
             -p "$TEST_SSH_PORT" \
             $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
-            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' bash -s" <<'REMOTE_SCRIPT'
+            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' TEST_SQLITE_DATABASE_PATH='$TEST_SQLITE_DATABASE_PATH' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
+
+          export NODE_ENV=production
+          export SQLITE_DATABASE_PATH="$TEST_SQLITE_DATABASE_PATH"
 
           pnpm_cmd() {
             corepack pnpm@10.33.0 "$@"
@@ -117,7 +125,7 @@ jobs:
             echo "[deploy] PM2 process $name not found; starting in $cwd"
             (
               cd "$cwd"
-              NODE_ENV=production pm2 start "$entry" --name "$name" --update-env
+              pm2 start "$entry" --name "$name" --update-env
             )
           }
 
