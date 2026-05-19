@@ -11,7 +11,7 @@ import { APP_DB } from './app-db.token';
       provide: APP_DB,
       useFactory: () => {
         const env = parseEnv(process.env);
-        const monorepoRoot = join(__dirname, '../../../..');
+        const monorepoRoot = join(__dirname, '../../..');
         const full = resolveSqliteFilePath(
           env.SQLITE_DATABASE_PATH,
           monorepoRoot,

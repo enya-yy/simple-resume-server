@@ -7,9 +7,13 @@ const Database = require('better-sqlite3');
 require('./load-sqlite-env.cjs');
 
 const { resolveSqliteFilePath } = require('@simple-resume/sqlite-pg');
-const monorepoRoot = path.join(__dirname, '../../..');
+const monorepoRoot = path.join(__dirname, '../..');
+const defaultDbPath =
+  process.env.NODE_ENV === 'production'
+    ? '/home/ubuntu/projects/simple-resume/db/simple-resume.db'
+    : 'local-db/simple-resume.db';
 const dbPath = resolveSqliteFilePath(
-  process.env.SQLITE_DATABASE_PATH || 'data/simple-resume.db',
+  process.env.SQLITE_DATABASE_PATH || defaultDbPath,
   monorepoRoot,
 );
 

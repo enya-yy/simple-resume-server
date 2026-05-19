@@ -10,6 +10,12 @@ env:
   TEST_SERVER_DIR: ${{ vars.TEST_SERVER_DIR || '/home/ubuntu/projects/simple-resume/server' }}
   TEST_PM2_API_NAME: ${{ vars.TEST_PM2_API_NAME || 'simple-resume-api' }}
   TEST_PM2_WORKER_NAME: ${{ vars.TEST_PM2_WORKER_NAME || 'simple-resume-worker' }}
+  TEST_SSH_OPTIONS: >-
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o ServerAliveInterval=30
+    -o ServerAliveCountMax=20
+    -o TCPKeepAlive=yes
 
 jobs:
   deploy-server:
@@ -41,8 +47,7 @@ jobs:
         run: |
           sshpass -e ssh \
             -p "$TEST_SSH_PORT" \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
+            $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
             "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_SSH_USER='$TEST_SSH_USER' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
@@ -72,7 +77,7 @@ jobs:
           SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
         run: |
           sshpass -e rsync -az --delete --no-owner --no-group --no-perms \
-            -e "ssh -p $TEST_SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            -e "ssh -p $TEST_SSH_PORT $TEST_SSH_OPTIONS" \
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='.env' \
@@ -90,8 +95,7 @@ jobs:
         run: |
           sshpass -e ssh \
             -p "$TEST_SSH_PORT" \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
+            $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
             "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
@@ -100,10 +104,36 @@ jobs:
             corepack pnpm@10.33.0 "$@"
           }
 
+          pm2_reload_or_start() {
+            local name="$1"
+            local cwd="$2"
+            local entry="$3"
+
+            if pm2 describe "$name" >/dev/null 2>&1; then
+              pm2 reload "$name" --update-env 2>/dev/null || pm2 restart "$name" --update-env
+              return
+            fi
+
+            echo "[deploy] PM2 process $name not found; starting in $cwd"
+            (
+              cd "$cwd"
+              NODE_ENV=production pm2 start "$entry" --name "$name" --update-env
+            )
+          }
+
           if ! command -v pm2 >/dev/null 2>&1; then
             echo "pm2 is required on the test server but was not found in PATH."
             exit 1
           fi
+
+          (
+            while true; do
+              sleep 30
+              echo "[deploy] remote build still running at $(date -u +%H:%M:%SZ)"
+            done
+          ) &
+          heartbeat_pid=$!
+          trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 
           cd "$TEST_SERVER_DIR"
           pnpm_cmd --dir packages/sqlite-pg install --frozen-lockfile
@@ -113,12 +143,22 @@ jobs:
           pnpm_cmd rebuild --pending
           pnpm_cmd --dir worker install --frozen-lockfile
           pnpm_cmd --dir worker rebuild --pending
+          node -r ./scripts/load-sqlite-env.cjs <<'NODE'
+          const { mkdirSync } = require('node:fs');
+          const { dirname, resolve } = require('node:path');
+          const { resolveSqliteFilePath } = require('@simple-resume/sqlite-pg');
+
+          const monorepoRoot = resolve(process.cwd(), '..');
+          const sqlitePath = resolveSqliteFilePath(process.env.SQLITE_DATABASE_PATH, monorepoRoot);
+          mkdirSync(dirname(sqlitePath), { recursive: true });
+          console.log(`[deploy] SQLite database path: ${sqlitePath}`);
+          NODE
           pnpm_cmd build
           pnpm_cmd migrate
 
           cd "$TEST_SERVER_DIR/worker"
           pnpm_cmd build
 
-          pm2 reload "$TEST_PM2_API_NAME" --update-env || pm2 restart "$TEST_PM2_API_NAME" --update-env
-          pm2 reload "$TEST_PM2_WORKER_NAME" --update-env || pm2 restart "$TEST_PM2_WORKER_NAME" --update-env
+          pm2_reload_or_start "$TEST_PM2_API_NAME" "$TEST_SERVER_DIR" "dist/main.js"
+          pm2_reload_or_start "$TEST_PM2_WORKER_NAME" "$TEST_SERVER_DIR/worker" "dist/main.js"
           REMOTE_SCRIPT

@@ -12,6 +12,12 @@ function emptyToUndefined<T extends z.ZodTypeAny>(schema: T) {
   }, schema);
 }
 
+export function defaultSqliteDatabasePath(nodeEnv: string | undefined): string {
+  return nodeEnv === 'production'
+    ? '/home/ubuntu/projects/simple-resume/db/simple-resume.db'
+    : 'local-db/simple-resume.db';
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z
@@ -21,8 +27,9 @@ const envSchema = z
     API_PORT: z.coerce.number().int().positive().default(3000),
     /**
      * SQLite 文件路径：以 `/` 开头为绝对路径；否则相对**仓库根目录**（与 Worker 须一致，且与在 `server/` 或 `server/worker/` 下启动无关）。
+     * 未设置时：开发环境为 `local-db/simple-resume.db`，生产环境为服务器持久化目录。
      */
-    SQLITE_DATABASE_PATH: z.string().min(1).default('data/simple-resume.db'),
+    SQLITE_DATABASE_PATH: emptyToUndefined(z.string().min(1)).optional(),
     SESSION_SECRET: z
       .string()
       .min(32, 'SESSION_SECRET 至少需要 32 个字符')
@@ -102,7 +109,12 @@ const envSchema = z
         message: 'LLM_PROVIDER=dashscope 时必须设置 DASHSCOPE_API_KEY',
       });
     }
-  });
+  })
+  .transform((env) => ({
+    ...env,
+    SQLITE_DATABASE_PATH:
+      env.SQLITE_DATABASE_PATH ?? defaultSqliteDatabasePath(env.NODE_ENV),
+  }));
 
 export type EnvConfig = z.infer<typeof envSchema>;
 

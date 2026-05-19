@@ -9,8 +9,12 @@ import { runPolishJobStep } from "./polish.worker.js";
 function resolveSqlitePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const monorepoRoot = join(here, "../../..");
+  const defaultDbPath =
+    process.env.NODE_ENV === "production"
+      ? "/home/ubuntu/projects/simple-resume/db/simple-resume.db"
+      : "local-db/simple-resume.db";
   const raw =
-    process.env.SQLITE_DATABASE_PATH?.trim() || "data/simple-resume.db";
+    process.env.SQLITE_DATABASE_PATH?.trim() || defaultDbPath;
   return resolveSqliteFilePath(raw, monorepoRoot);
 }
 
