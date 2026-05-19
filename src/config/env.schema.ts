@@ -38,6 +38,15 @@ const envSchema = z
     CORS_ORIGINS: z
       .string()
       .default('http://localhost:5173,http://127.0.0.1:5173'),
+    /**
+     * Session cookie `Secure`：未设置时 production 为 `auto`（随连接是否 HTTPS），其它环境为 false。
+     * 测试机仅 HTTP 时可显式设为 `false`。
+     */
+    SESSION_COOKIE_SECURE: z
+      .enum(['true', 'false', 'auto'])
+      .optional(),
+    /** 置于 nginx 等反向代理后时解析 X-Forwarded-*（默认 production 开启） */
+    TRUST_PROXY: z.enum(['true', 'false']).optional(),
     /** 分享链接展示使用的前端公开域名（未设置时回退到 CORS_ORIGINS 第一项） */
     WEB_PUBLIC_ORIGIN: emptyToUndefined(z.string().url()).optional(),
     /** S3 兼容存储（生产/本地 MinIO）；用于导出 PDF 预签名下载 */

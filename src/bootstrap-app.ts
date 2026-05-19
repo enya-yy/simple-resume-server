@@ -9,6 +9,22 @@ import { TransformInterceptor } from './common/transform.interceptor';
 import { parseEnv } from './config/env.schema';
 import { APP_DB } from './database/app-db.token';
 import { createSqliteSessionStore } from './database/sqlite-session-store';
+import type { EnvConfig } from './config/env.schema';
+
+function resolveSessionCookieSecure(
+  env: EnvConfig,
+): boolean | 'auto' {
+  if (env.SESSION_COOKIE_SECURE === 'true') return true;
+  if (env.SESSION_COOKIE_SECURE === 'false') return false;
+  if (env.SESSION_COOKIE_SECURE === 'auto') return 'auto';
+  return env.NODE_ENV === 'production' ? 'auto' : false;
+}
+
+function shouldTrustProxy(env: EnvConfig): boolean {
+  if (env.TRUST_PROXY === 'true') return true;
+  if (env.TRUST_PROXY === 'false') return false;
+  return env.NODE_ENV === 'production';
+}
 
 export async function configureHttpApp(app: INestApplication): Promise<void> {
   const env = parseEnv(process.env);
@@ -18,6 +34,11 @@ export async function configureHttpApp(app: INestApplication): Promise<void> {
     .filter((o) => o.length > 0);
   if (corsOrigins.length === 0) {
     throw new Error('CORS_ORIGINS must include at least one origin');
+  }
+
+  const expressApp = app.getHttpAdapter().getInstance();
+  if (shouldTrustProxy(env)) {
+    expressApp.set('trust proxy', 1);
   }
 
   app.use(helmet());
@@ -40,9 +61,10 @@ export async function configureHttpApp(app: INestApplication): Promise<void> {
       cookie: {
         httpOnly: true,
         sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-        secure: env.NODE_ENV === 'production',
+        secure: resolveSessionCookieSecure(env),
         maxAge: 7 * 24 * 60 * 60 * 1000,
       },
+      proxy: shouldTrustProxy(env),
     }),
   );
 
