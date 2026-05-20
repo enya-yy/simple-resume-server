@@ -35,7 +35,7 @@ export function rewriteSqlDialect(sql: string): string {
   let s = sql;
   s = s.replace(/::jsonb/gi, '');
   s = s.replace(/::int/gi, '');
-  s = s.replace(/\bnow()\b/gi, "datetime('now')");
+  s = s.replace(/\bnow\s*\(\s*\)/gi, "datetime('now')");
   s = s.replace(/\bFOR UPDATE\b/gi, '');
   return s;
 }
