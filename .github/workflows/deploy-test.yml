@@ -107,6 +107,9 @@ jobs:
 
           export NODE_ENV=production
           export SQLITE_DATABASE_PATH="$TEST_SQLITE_DATABASE_PATH"
+          # 测试机走 HTTP：session 须可写入非 Secure cookie，否则 CSRF / 登录恒为 403
+          export SESSION_COOKIE_SECURE=false
+          export TRUST_PROXY=true
 
           pnpm_cmd() {
             corepack pnpm@10.33.0 "$@"
