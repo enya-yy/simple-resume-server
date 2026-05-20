@@ -15,20 +15,31 @@ import {
   INTENT_FUNCTION_SCHEMA,
 } from '../prompts/intent-dispatcher.prompt';
 
-export class DashScopeProvider implements ILlmGateway {
+export type OpenAiCompatibleLlmCredentials = {
+  apiKey: string;
+  baseURL: string;
+  intentModel: string;
+  chatModel: string;
+};
+
+/** OpenAI SDK 访问任意 OpenAI 兼容 Chat Completions 端点（百炼、DeepSeek 等）。 */
+export class OpenAiCompatibleLlmProvider implements ILlmGateway {
   private readonly client: OpenAI;
   private readonly intentModel: string;
   private readonly chatModel: string;
   private readonly confidenceThreshold: number;
-  private readonly logger = new Logger(DashScopeProvider.name);
+  private readonly logger = new Logger(OpenAiCompatibleLlmProvider.name);
 
-  constructor(env: EnvConfig) {
+  constructor(
+    env: Pick<EnvConfig, 'LLM_CONFIDENCE_THRESHOLD'>,
+    creds: OpenAiCompatibleLlmCredentials,
+  ) {
     this.client = new OpenAI({
-      apiKey: env.DASHSCOPE_API_KEY,
-      baseURL: env.DASHSCOPE_BASE_URL,
+      apiKey: creds.apiKey,
+      baseURL: creds.baseURL,
     });
-    this.intentModel = env.DASHSCOPE_INTENT_MODEL;
-    this.chatModel = env.DASHSCOPE_MODEL;
+    this.intentModel = creds.intentModel;
+    this.chatModel = creds.chatModel;
     this.confidenceThreshold = env.LLM_CONFIDENCE_THRESHOLD;
   }
 

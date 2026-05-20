@@ -27,6 +27,8 @@ export * from "./schemas/chat-message.schema.js";
 export * from "./constants/chat-intents.js";
 export * from "./schemas/intent-result.schema.js";
 export * from "./llm/dashscope-config.js";
+export * from "./llm/deepseek-config.js";
+export * from "./llm/chat-assist-llm-env.js";
 export * from "./llm/resume-summary.js";
 export * from "./llm/chat-followup-phrases.js";
 export * from "./markdown/resumeMarkdown.js";

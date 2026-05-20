@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   DASHSCOPE_DEFAULT_BASE_URL,
   DASHSCOPE_DEFAULT_MODEL,
+  DEEPSEEK_DEFAULT_BASE_URL,
+  DEEPSEEK_DEFAULT_MODEL,
 } from '../contracts/index';
 
 /** `.env` 里常见的 `KEY=` 空串：在可选字段上视为未设置，避免 `z.string().url()` 等对 `""` 校验失败 */
@@ -82,13 +84,19 @@ const envSchema = z
     OPS_METRICS_TOKEN: emptyToUndefined(z.string().min(8)).optional(),
 
     // LLM Provider
-    LLM_PROVIDER: z.enum(['dashscope', 'stub']).default('stub'),
+    LLM_PROVIDER: z.enum(['dashscope', 'deepseek', 'stub']).default('stub'),
     DASHSCOPE_API_KEY: emptyToUndefined(z.string().min(1)).optional(),
     DASHSCOPE_BASE_URL: emptyToUndefined(z.string().url()).default(
       DASHSCOPE_DEFAULT_BASE_URL,
     ),
     DASHSCOPE_MODEL: z.string().default(DASHSCOPE_DEFAULT_MODEL),
     DASHSCOPE_INTENT_MODEL: z.string().default(DASHSCOPE_DEFAULT_MODEL),
+    DEEPSEEK_API_KEY: emptyToUndefined(z.string().min(1)).optional(),
+    DEEPSEEK_BASE_URL: emptyToUndefined(z.string().url()).default(
+      DEEPSEEK_DEFAULT_BASE_URL,
+    ),
+    DEEPSEEK_MODEL: z.string().default(DEEPSEEK_DEFAULT_MODEL),
+    DEEPSEEK_INTENT_MODEL: z.string().default(DEEPSEEK_DEFAULT_MODEL),
 
     // LLM Timeouts (ms)
     LLM_FIRST_BYTE_TIMEOUT_MS: z.coerce
@@ -121,6 +129,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['DASHSCOPE_API_KEY'],
         message: 'LLM_PROVIDER=dashscope 时必须设置 DASHSCOPE_API_KEY',
+      });
+    }
+    if (env.LLM_PROVIDER === 'deepseek' && !env.DEEPSEEK_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DEEPSEEK_API_KEY'],
+        message: 'LLM_PROVIDER=deepseek 时必须设置 DEEPSEEK_API_KEY',
       });
     }
   })

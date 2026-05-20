@@ -7,14 +7,30 @@ export function maskSecret(value: string | undefined): string {
 }
 
 export function logLlmStartupConfig(env: EnvConfig): void {
+  const isDash = env.LLM_PROVIDER === 'dashscope';
+  const isDeepSeek = env.LLM_PROVIDER === 'deepseek';
+
   console.log(
     JSON.stringify({
       msg: 'llm_startup_config',
       provider: env.LLM_PROVIDER,
       dashscopeApiKey: maskSecret(env.DASHSCOPE_API_KEY),
-      chatModel: env.DASHSCOPE_MODEL,
-      intentModel: env.DASHSCOPE_INTENT_MODEL,
-      baseUrl: env.DASHSCOPE_BASE_URL,
+      deepseekApiKey: maskSecret(env.DEEPSEEK_API_KEY),
+      chatModel: isDash
+        ? env.DASHSCOPE_MODEL
+        : isDeepSeek
+          ? env.DEEPSEEK_MODEL
+          : '(n/a)',
+      intentModel: isDash
+        ? env.DASHSCOPE_INTENT_MODEL
+        : isDeepSeek
+          ? env.DEEPSEEK_INTENT_MODEL
+          : '(n/a)',
+      baseUrl: isDash
+        ? env.DASHSCOPE_BASE_URL
+        : isDeepSeek
+          ? env.DEEPSEEK_BASE_URL
+          : '(n/a)',
       llmDebug: env.LLM_DEBUG,
       firstByteTimeoutMs: env.LLM_FIRST_BYTE_TIMEOUT_MS,
       streamIdleTimeoutMs: env.LLM_STREAM_IDLE_TIMEOUT_MS,

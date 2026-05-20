@@ -1,15 +1,15 @@
 import {
   CHAT_ASSIST_JOB_ERROR_CODES,
   CHAT_ASSIST_JOB_TIMEOUT_MS_DEFAULT,
+  resolveChatAssistLlmEnv,
   type ChatAssistKind,
 } from '../contracts/index';
 import type { PgLikePool } from '@simple-resume/sqlite-pg';
 
 import { JobTimeoutError, withTimeout } from './lib/job-timeout.js';
 import {
-  DashScopeRequestError,
-  completeDashScopeChat,
-  getDashScopeEnv,
+  OpenAiChatRequestError,
+  completeOpenAiChatCompletion,
 } from './bailian-dashscope-chat.js';
 
 const MSG_PROCESSING =
@@ -61,9 +61,10 @@ function buildUserPayload(params: {
 
 function placeholderSuggestion(assistKind: ChatAssistKind): string {
   return [
-    '【离线占位】尚未配置 DASHSCOPE_API_KEY（阿里云百炼 API-KEY），',
+    '【离线占位】未配置可用的对话模型密钥。请设置 DEEPSEEK_API_KEY 并指定 LLM_PROVIDER=deepseek',
+    '（推荐，默认模型 deepseek-v4-flash），或沿用百炼：DASHSCOPE_API_KEY 与 LLM_PROVIDER=dashscope。',
     `当前为本地/CI 占位输出（类型：${assistKind}）。`,
-    '配置密钥后，将调用百炼兼容 OpenAI 的 Chat Completions 生成真实建议。',
+    '配置密钥后，将调用兼容 OpenAI Chat Completions 的接口生成真实建议。',
     '写作提示：用动词开头、量化结果、避免空泛形容词。',
   ].join('');
 }
@@ -142,14 +143,15 @@ async function runChatAssistJobInner(
 
   let suggestion: string;
   try {
-    const ds = getDashScopeEnv();
-    if (!ds.apiKey) {
+    const cfg = resolveChatAssistLlmEnv(process.env);
+    if (!cfg) {
       suggestion = placeholderSuggestion(assistKind);
     } else {
-      suggestion = await completeDashScopeChat({
-        apiKey: ds.apiKey,
-        model: ds.model,
-        baseUrl: ds.baseUrl,
+      suggestion = await completeOpenAiChatCompletion({
+        backend: cfg.backend,
+        apiKey: cfg.apiKey,
+        model: cfg.model,
+        baseUrl: cfg.baseUrl,
         systemPrompt: buildSystemPrompt(assistKind),
         userContent,
       });
@@ -171,9 +173,9 @@ async function runChatAssistJobInner(
     );
   } catch (e) {
     const userMsg =
-      e instanceof DashScopeRequestError ? e.userHint : MSG_PROCESSING;
+      e instanceof OpenAiChatRequestError ? e.userHint : MSG_PROCESSING;
     const logBits =
-      e instanceof DashScopeRequestError
+      e instanceof OpenAiChatRequestError
         ? [e.httpStatus, e.apiCode ?? ''].join(' ')
         : '';
     console.error(
