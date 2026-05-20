@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  buildFormCardLeadIn,
   buildResumeSummary,
   createChatSessionBodySchema,
   ERROR_CODES,
@@ -448,7 +449,7 @@ export class ChatSessionsService {
       }
 
       const dispatchUserMessage = isSystemEvent
-        ? `[系统事件] ${parsed.content}\n请根据当前简历状态，给出下一步引导建议。`
+        ? `[系统事件] ${parsed.content}\n请简要确认保存结果与简历进度；具体下一步由界面快捷按钮提供，回复中不要列举操作建议。`
         : parsed.content;
 
       this.emitLlmDebug(writeEvent, {
@@ -621,13 +622,17 @@ export class ChatSessionsService {
           intentResult.extractedFields,
         );
 
-        const formLeadIn = intentResult.responseText ?? '';
-        if (!writeEvent('token', { text: formLeadIn })) return;
+        const formLeadIn = buildFormCardLeadIn({
+          formType,
+          modelResponseText: intentResult.responseText,
+          resumeSummary,
+        });
 
         if (
           !writeEvent('form', {
             formType,
             fields,
+            leadIn: formLeadIn,
             extractedFields: intentResult.extractedFields ?? {},
           })
         )
@@ -639,6 +644,7 @@ export class ChatSessionsService {
           role: 'assistant',
           formType,
           fields,
+          leadIn: formLeadIn,
         };
       } else if (responseType === 'layout_command') {
         if (!writeEvent('command', { command: 'show_preview', params: {} }))
@@ -662,11 +668,11 @@ export class ChatSessionsService {
         }
         if (isSystemEvent) {
           systemPromptLines.push(
-            `\n当前输入是一条「表单/模块保存成功」的系统事件（含 [系统事件] 前缀与引导要求）。请严格按下面结构回复，便于用户继续编辑：\n` +
-              `1）一两句确认刚保存的模块；\n` +
-              `2）结合「当前简历状态」用一两句点出整体进度（哪些模块还空、哪些已有内容，避免与状态矛盾）；\n` +
-              `3）单独一段，标题为「猜你想做」，列出 3～5 条**具体可执行**的下一步，每条独立一行并以「·」开头（例如继续补另一段经历、补项目/教育/技能、润色某段、查看预览等）；\n` +
-              `4）可自然提到对话区下方的快捷按钮，但不要编造产品中不存在的功能名称。`,
+            `\n当前输入是一条「表单/模块保存成功」的系统事件。请用 2～4 句中文简短回复：\n` +
+              `1）确认刚保存的模块；\n` +
+              `2）结合「当前简历状态」概括整体进度（还缺哪些模块即可，避免与状态矛盾）；\n` +
+              `3）**不要**写「猜你想做」、不要用「·」列举下一步（对话区底部已有快捷按钮，勿重复其文案）；\n` +
+              `4）全文约 60～120 字；可用一句提示用户点击下方快捷按钮继续。`,
           );
         }
         if (intentResult.responseText) {

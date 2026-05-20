@@ -18,6 +18,8 @@ export const formCardMessageSchema = z.object({
   role: z.literal('assistant'),
   formType: z.string(),
   fields: z.array(formFieldSchema),
+  /** 表单前的引导说明（展示在 FormCard 上方） */
+  leadIn: z.string().optional(),
   submittedData: z.record(z.string(), z.string()).optional(),
 });
 

@@ -16,6 +16,7 @@ export type FormCardMessage = {
   role: 'assistant'
   formType: string
   fields: FormField[]
+  leadIn?: string
   submittedData?: Record<string, string>
 }
 

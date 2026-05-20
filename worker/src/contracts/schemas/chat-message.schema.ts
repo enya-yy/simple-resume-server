@@ -18,6 +18,7 @@ export const formCardMessageSchema = z.object({
   role: z.literal("assistant"),
   formType: z.string(),
   fields: z.array(formFieldSchema),
+  leadIn: z.string().optional(),
   submittedData: z.record(z.string(), z.string()).optional(),
 });
 

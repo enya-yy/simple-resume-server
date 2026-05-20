@@ -16,6 +16,8 @@ export type FormCardMessage = {
   role: 'assistant';
   formType: string;
   fields: FormField[];
+  /** 表单前的引导说明 */
+  leadIn?: string;
   submittedData?: Record<string, string>;
 };
 

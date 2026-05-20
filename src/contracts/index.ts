@@ -31,4 +31,5 @@ export * from './llm/deepseek-config';
 export * from './llm/chat-assist-llm-env';
 export * from './llm/resume-summary';
 export * from './llm/chat-followup-phrases';
+export * from './llm/form-card-lead-in';
 export * from './markdown/resumeMarkdown';

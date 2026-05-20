@@ -68,5 +68,5 @@ export function buildResumeProgressFollowupPhrases(
   add('润色简历里的某一段文字');
   add('查看简历预览');
 
-  return phrases.slice(0, 9);
+  return phrases.slice(0, 3);
 }
