@@ -3,12 +3,14 @@ import { NestFactory } from '@nestjs/core';
 import type { PgLikePool } from '@simple-resume/sqlite-pg';
 import { AppModule } from './app.module';
 import { configureHttpApp } from './bootstrap-app';
+import { logLlmStartupConfig } from './common/llm/llm-debug';
 import { parseEnv } from './config/env.schema';
 import { APP_DB } from './database/app-db.token';
 import { startInProcessWorker } from './worker/in-process-worker';
 
 async function bootstrap() {
   const env = parseEnv(process.env);
+  logLlmStartupConfig(env);
   const app = await NestFactory.create(AppModule);
   await configureHttpApp(app);
   const pool = app.get<PgLikePool>(APP_DB);

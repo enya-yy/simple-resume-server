@@ -109,6 +109,11 @@ const envSchema = z
 
     // Intent Dispatcher
     LLM_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.6),
+    /** 为 true 时在 PM2 日志与 SSE 流中输出 LLM 调用调试信息 */
+    LLM_DEBUG: z
+      .string()
+      .optional()
+      .transform((v) => v === 'true'),
   })
   .superRefine((env, ctx) => {
     if (env.LLM_PROVIDER === 'dashscope' && !env.DASHSCOPE_API_KEY) {

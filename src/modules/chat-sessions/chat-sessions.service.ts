@@ -23,6 +23,7 @@ import {
 import type { Response } from 'express';
 import { ZodError } from 'zod';
 import { LlmGatewayService } from '../../common/llm/llm-gateway.service';
+import type { LlmDebugPayload } from '../../common/llm/llm-debug';
 import { parseEnv } from '../../config/env.schema';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { ChatMessagesRepository } from './chat-messages.repository';
@@ -112,6 +113,7 @@ function buildDefaultFields(
 export class ChatSessionsService {
   private readonly logger = new Logger(ChatSessionsService.name);
   private readonly confidenceThreshold: number;
+  private readonly llmDebug: boolean;
 
   constructor(
     private readonly chatSessionsRepository: ChatSessionsRepository,
@@ -122,6 +124,16 @@ export class ChatSessionsService {
   ) {
     const env = parseEnv(process.env);
     this.confidenceThreshold = env.LLM_CONFIDENCE_THRESHOLD;
+    this.llmDebug = env.LLM_DEBUG;
+  }
+
+  private emitLlmDebug(
+    writeEvent: (event: string, data: Record<string, unknown>) => boolean,
+    payload: LlmDebugPayload,
+  ) {
+    this.logger.log({ msg: 'llm_debug', ...payload });
+    if (!this.llmDebug) return;
+    writeEvent('debug', payload);
   }
 
   async listSessions(userId: string) {
@@ -439,6 +451,22 @@ export class ChatSessionsService {
         ? `[系统事件] ${parsed.content}\n请根据当前简历状态，给出下一步引导建议。`
         : parsed.content;
 
+      this.emitLlmDebug(writeEvent, {
+        step: 'chat_pipeline_start',
+        provider: this.llmGateway.providerName,
+        requestId,
+        sessionId,
+        userMessagePreview: parsed.content.slice(0, 80),
+        isSystemEvent,
+      });
+
+      this.emitLlmDebug(writeEvent, {
+        step: 'intent_dispatch_start',
+        provider: this.llmGateway.providerName,
+        requestId,
+        sessionId,
+      });
+
       let dispatchResult;
       try {
         dispatchResult = await this.intentDispatcher.dispatch({
@@ -455,6 +483,13 @@ export class ChatSessionsService {
           sessionId,
           error: err instanceof Error ? err.message : String(err),
         });
+        this.emitLlmDebug(writeEvent, {
+          step: 'intent_dispatch_catastrophic',
+          provider: this.llmGateway.providerName,
+          requestId,
+          sessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
         dispatchResult = {
           intentResult: {
             intent: 'GENERAL_CHAT' as const,
@@ -467,6 +502,17 @@ export class ChatSessionsService {
       }
 
       const { intentResult, isLowConfidence, suggestions } = dispatchResult;
+
+      this.emitLlmDebug(writeEvent, {
+        step: 'intent_dispatch_done',
+        provider: this.llmGateway.providerName,
+        requestId,
+        sessionId,
+        intent: intentResult.intent,
+        confidence: intentResult.confidence,
+        isLowConfidence,
+        responseTextPreview: intentResult.responseText?.slice(0, 80),
+      });
 
       if (
         !writeEvent('intent', {
@@ -607,6 +653,7 @@ export class ChatSessionsService {
         };
       } else {
         let fullText = '';
+        let responseSource: 'stream' | 'intent_responseText' | 'empty' = 'empty';
         const systemPromptLines = [
           '你是一个专业的简历辅导顾问。请用中文回复，保持友好和专业。',
         ];
@@ -628,6 +675,14 @@ export class ChatSessionsService {
           );
         }
 
+        this.emitLlmDebug(writeEvent, {
+          step: 'stream_chat_start',
+          provider: this.llmGateway.providerName,
+          requestId,
+          sessionId,
+          responseType,
+        });
+
         try {
           await this.llmGateway.streamChat({
             messages: [
@@ -647,21 +702,48 @@ export class ChatSessionsService {
               return;
             },
           });
+          responseSource = 'stream';
+          this.emitLlmDebug(writeEvent, {
+            step: 'stream_chat_done',
+            provider: this.llmGateway.providerName,
+            requestId,
+            sessionId,
+            fullTextLength: fullText.length,
+            fullTextPreview: fullText.slice(0, 80),
+          });
         } catch (streamErr) {
+          const streamError =
+            streamErr instanceof Error ? streamErr.message : String(streamErr);
           this.logger.warn({
             msg: 'stream_chat_fallback',
             requestId,
             sessionId,
-            error:
-              streamErr instanceof Error
-                ? streamErr.message
-                : String(streamErr),
+            error: streamError,
+          });
+          this.emitLlmDebug(writeEvent, {
+            step: 'stream_chat_fallback',
+            provider: this.llmGateway.providerName,
+            requestId,
+            sessionId,
+            error: streamError,
+            hadPartialStream: fullText.length > 0,
+            partialTextPreview: fullText.slice(0, 80),
           });
           if (!fullText) {
             fullText = intentResult.responseText ?? '';
+            responseSource = 'intent_responseText';
             if (!writeEvent('token', { text: fullText })) return;
           }
         }
+
+        this.emitLlmDebug(writeEvent, {
+          step: 'response_ready',
+          provider: this.llmGateway.providerName,
+          requestId,
+          sessionId,
+          responseSource,
+          finalTextPreview: fullText.slice(0, 80),
+        });
 
         contentType = 'text';
         contentJson = {
