@@ -1,26 +1,19 @@
-import type { IntentResult } from '../../contracts/index';
+import type { ResumeAgentTurn } from './resume-agent-response-parse';
+import type { ResumeAgentChatTurn } from '../../contracts/llm/chat-history-for-agent';
 
-export interface IntentDispatchInput {
+export interface ResumeAgentDispatchInput {
   userMessage: string;
   sessionId: string;
   requestId: string;
-  /** Compact resume status injected as context for intent routing. */
-  resumeSummary?: string;
-  signal?: AbortSignal;
-}
-
-export interface StreamChatInput {
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  sessionId: string;
-  requestId: string;
-  onToken: (text: string) => void | Promise<void>;
-  onDone: () => void | Promise<void>;
+  /** 脱水目录 + 完成度分析等 */
+  resumeAgentContext?: string;
+  /** 当前消息之前的最近若干轮对话 */
+  chatHistory?: ResumeAgentChatTurn[];
   signal?: AbortSignal;
 }
 
 export interface ILlmGateway {
-  dispatchIntent(input: IntentDispatchInput): Promise<IntentResult>;
-  streamChat(input: StreamChatInput): Promise<void>;
+  dispatchResumeAgent(input: ResumeAgentDispatchInput): Promise<ResumeAgentTurn>;
 }
 
 export const LLM_GATEWAY = Symbol('LLM_GATEWAY');

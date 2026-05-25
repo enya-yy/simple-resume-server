@@ -42,6 +42,8 @@ export function logLlmStartupConfig(env: EnvConfig): void {
 
 export type LlmDebugStep =
   | 'chat_pipeline_start'
+  | 'resume_agent_dispatch_start'
+  | 'resume_agent_dispatch_done'
   | 'intent_dispatch_start'
   | 'intent_dispatch_done'
   | 'intent_dispatch_catastrophic'

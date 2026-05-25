@@ -8,16 +8,24 @@ import {
 } from '@nestjs/common';
 import {
   buildFormCardLeadIn,
+  buildAgentReply,
+  analyzeResumeCompletion,
+  buildResumeAgentContext,
+  resolveResumeAgentTurnMeta,
+  buildResumeCatalog,
   buildResumeSummary,
+  buildChatHistoryForAgent,
+  CHAT_HISTORY_MAX_MESSAGES,
+  estimateChatHistoryTokens,
+  EMPTY_RESUME_DOCUMENT,
+  findResumeItemLocation,
   createChatSessionBodySchema,
   ERROR_CODES,
-  INTENT_RESPONSE_TYPE,
   patchChatFormCardMessageBodySchema,
   patchChatSessionBodySchema,
-  patchResumeBodySchema,
   resumeDocumentSchema,
   sendChatMessageBodySchema,
-  type ChatIntent,
+  RESUME_TITLE_MAX,
   type FormField,
   type ResumeDocument,
 } from '../../contracts/index';
@@ -26,10 +34,11 @@ import { ZodError } from 'zod';
 import { LlmGatewayService } from '../../common/llm/llm-gateway.service';
 import type { LlmDebugPayload } from '../../common/llm/llm-debug';
 import { parseEnv } from '../../config/env.schema';
+import { PolishJobsService } from '../polish-jobs/polish-jobs.service';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { ChatMessagesRepository } from './chat-messages.repository';
 import { ChatSessionsRepository } from './chat-sessions.repository';
-import { IntentDispatcherService } from './intent-dispatcher.service';
+import { ResumeAgentService } from '../resume-agent/resume-agent.service';
 
 const BASIC_INFO_FIELDS: FormField[] = [
   { name: 'fullName', label: '姓名', required: true },
@@ -70,8 +79,6 @@ const SKILL_FIELDS: FormField[] = [
   { name: 'description', label: '技能描述（多项用换行分隔）', required: true },
 ];
 
-const DEFAULT_SUGGESTIONS = ['填写基础信息', '添加工作经历', '查看简历预览'];
-
 type FormType = 'basic_info' | 'experience' | 'education' | 'project' | 'skill';
 
 const FORM_FIELDS_MAP: Record<FormType, FormField[]> = {
@@ -82,18 +89,15 @@ const FORM_FIELDS_MAP: Record<FormType, FormField[]> = {
   skill: SKILL_FIELDS,
 };
 
-function intentToFormType(
-  intent: ChatIntent,
-  extractedFields?: Record<string, string>,
-): FormType | null {
-  if (intent === 'CREATE_RESUME' || intent === 'EDIT_BASIC_INFO')
-    return 'basic_info';
-  if (intent === 'ADD_EXPERIENCE') {
-    const hint = extractedFields?.moduleType;
-    if (hint === 'education') return 'education';
-    if (hint === 'project') return 'project';
-    if (hint === 'skill') return 'skill';
-    return 'experience';
+function agentFormTypeToFormType(formType: string): FormType | null {
+  if (
+    formType === 'basic_info' ||
+    formType === 'experience' ||
+    formType === 'education' ||
+    formType === 'project' ||
+    formType === 'skill'
+  ) {
+    return formType;
   }
   return null;
 }
@@ -113,18 +117,17 @@ function buildDefaultFields(
 @Injectable()
 export class ChatSessionsService {
   private readonly logger = new Logger(ChatSessionsService.name);
-  private readonly confidenceThreshold: number;
   private readonly llmDebug: boolean;
 
   constructor(
     private readonly chatSessionsRepository: ChatSessionsRepository,
     private readonly chatMessagesRepository: ChatMessagesRepository,
-    private readonly intentDispatcher: IntentDispatcherService,
+    private readonly resumeAgentService: ResumeAgentService,
+    private readonly polishJobsService: PolishJobsService,
     private readonly resumesRepository: ResumesRepository,
     private readonly llmGateway: LlmGatewayService,
   ) {
     const env = parseEnv(process.env);
-    this.confidenceThreshold = env.LLM_CONFIDENCE_THRESHOLD;
     this.llmDebug = env.LLM_DEBUG;
   }
 
@@ -234,6 +237,17 @@ export class ChatSessionsService {
       });
     }
 
+    const resumeTitle =
+      parsed.title.length > RESUME_TITLE_MAX
+        ? parsed.title.slice(0, RESUME_TITLE_MAX)
+        : parsed.title;
+    await this.resumesRepository.setTitleForOwner(
+      result.session.resume_id,
+      userId,
+      resumeTitle,
+      true,
+    );
+
     return {
       sessionId: result.session.id,
       resumeId: result.session.resume_id,
@@ -244,21 +258,28 @@ export class ChatSessionsService {
   }
 
   async deleteSession(userId: string, sessionId: string) {
-    const result = await this.chatSessionsRepository.softDelete(
-      sessionId,
-      userId,
-    );
-
-    if (!result.ok) {
-      if ('error' in result && result.error === 'NOT_FOUND') {
-        throw new NotFoundException({
-          code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
-          message: '会话不存在',
-        });
-      }
+    const session = await this.chatSessionsRepository.findById(sessionId);
+    if (!session) {
+      throw new NotFoundException({
+        code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
+        message: '会话不存在',
+      });
+    }
+    if (session.user_id !== userId) {
       throw new ForbiddenException({
         code: ERROR_CODES.CHAT_SESSION_FORBIDDEN,
         message: '无权访问该会话',
+      });
+    }
+
+    const deleted = await this.resumesRepository.deleteByIdForUser(
+      session.resume_id,
+      userId,
+    );
+    if (!deleted) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
       });
     }
   }
@@ -398,7 +419,7 @@ export class ChatSessionsService {
 
     const isSystemEvent = parsed.source === 'system_event';
 
-    await this.chatMessagesRepository.insertMessage({
+    const userRow = await this.chatMessagesRepository.insertMessage({
       sessionId,
       role: isSystemEvent ? 'system' : 'user',
       contentType: 'text',
@@ -408,6 +429,13 @@ export class ChatSessionsService {
         text: parsed.content,
       },
     });
+
+    const historyRows = await this.chatMessagesRepository.listRecentBySession(
+      sessionId,
+      CHAT_HISTORY_MAX_MESSAGES,
+      userRow.id,
+    );
+    const chatHistory = buildChatHistoryForAgent(historyRows);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -424,32 +452,44 @@ export class ChatSessionsService {
     };
 
     try {
-      let resumeSummary: string | undefined;
-      try {
-        const session = await this.chatSessionsRepository.findById(sessionId);
-        if (session) {
-          const resume = await this.resumesRepository.findByIdForOwner(
-            session.resume_id,
-            userId,
-          );
-          if (resume?.document_json) {
-            const doc = resumeDocumentSchema.safeParse(resume.document_json);
-            if (doc.success) {
-              resumeSummary = buildResumeSummary(doc.data as ResumeDocument);
-            }
-          }
-        }
-      } catch (e) {
-        this.logger.warn({
-          msg: 'resume_summary_build_failed',
-          requestId,
-          sessionId,
-          error: e instanceof Error ? e.message : String(e),
+      const session = await this.chatSessionsRepository.findById(sessionId);
+      if (!session) {
+        throw new NotFoundException({
+          code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
+          message: '会话不存在',
         });
       }
 
-      const dispatchUserMessage = isSystemEvent
-        ? `[系统事件] ${parsed.content}\n请简要确认保存结果与简历进度；具体下一步由界面快捷按钮提供，回复中不要列举操作建议。`
+      let currentDocument: ResumeDocument | null = null;
+      let resumeAgentContext: string | undefined;
+      let resumeSummary: string | undefined;
+      const resume = await this.resumesRepository.findByIdForOwner(
+        session.resume_id,
+        userId,
+      );
+      if (resume?.document_json) {
+        const doc = resumeDocumentSchema.safeParse(resume.document_json);
+        if (doc.success) {
+          currentDocument = doc.data as ResumeDocument;
+          resumeAgentContext = buildResumeAgentContext(
+            currentDocument,
+            buildResumeCatalog(currentDocument),
+          );
+          resumeSummary = buildResumeSummary(currentDocument);
+        }
+      }
+
+      if (!currentDocument) {
+        currentDocument = EMPTY_RESUME_DOCUMENT as ResumeDocument;
+        resumeAgentContext = buildResumeAgentContext(
+          currentDocument,
+          buildResumeCatalog(currentDocument),
+        );
+        resumeSummary = buildResumeSummary(currentDocument);
+      }
+
+      const agentUserMessage = isSystemEvent
+        ? `[系统事件] ${parsed.content}`
         : parsed.content;
 
       this.emitLlmDebug(writeEvent, {
@@ -459,181 +499,139 @@ export class ChatSessionsService {
         sessionId,
         userMessagePreview: parsed.content.slice(0, 80),
         isSystemEvent,
+        historyMessageCount: chatHistory.length,
+        historyEstTokens: estimateChatHistoryTokens(chatHistory),
       });
 
       this.emitLlmDebug(writeEvent, {
-        step: 'intent_dispatch_start',
+        step: 'resume_agent_dispatch_start',
         provider: this.llmGateway.providerName,
         requestId,
         sessionId,
       });
 
-      let dispatchResult;
-      try {
-        dispatchResult = await this.intentDispatcher.dispatch({
-          userMessage: dispatchUserMessage,
-          sessionId,
-          requestId,
-          confidenceThreshold: this.confidenceThreshold,
-          resumeSummary,
-        });
-      } catch (err) {
-        this.logger.error({
-          msg: 'intent_dispatch_catastrophic',
-          requestId,
-          sessionId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        this.emitLlmDebug(writeEvent, {
-          step: 'intent_dispatch_catastrophic',
-          provider: this.llmGateway.providerName,
-          requestId,
-          sessionId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        dispatchResult = {
-          intentResult: {
-            intent: 'GENERAL_CHAT' as const,
-            confidence: 0,
-            responseText: '你好！我是你的简历助手，有什么可以帮你的吗？',
-          },
-          isLowConfidence: true,
-          suggestions: [...DEFAULT_SUGGESTIONS],
-        };
-      }
+      const agentRun = await this.resumeAgentService.runTurn({
+        userMessage: agentUserMessage,
+        resumeAgentContext,
+        chatHistory,
+        document: currentDocument,
+        sessionId,
+        requestId,
+        isSystemEvent,
+      });
 
-      const { intentResult, isLowConfidence, suggestions } = dispatchResult;
+      const { turn, document, documentChanged, toolResults } = agentRun;
+
+      const resolvedMeta = resolveResumeAgentTurnMeta({
+        meta: turn.meta,
+        mutationCalls: turn.mutationCalls,
+        uiActions: turn.uiActions,
+        isSystemEvent,
+      });
 
       this.emitLlmDebug(writeEvent, {
-        step: 'intent_dispatch_done',
+        step: 'resume_agent_dispatch_done',
         provider: this.llmGateway.providerName,
         requestId,
         sessionId,
-        intent: intentResult.intent,
-        confidence: intentResult.confidence,
-        isLowConfidence,
-        responseTextPreview: intentResult.responseText?.slice(0, 80),
+        mutationToolCount: turn.mutationCalls.length,
+        uiActionCount: turn.uiActions.length,
+        documentChanged,
+        turnOutcome: resolvedMeta.outcome,
+        turnIntent: resolvedMeta.intent,
+        responseTextPreview: turn.responseText.slice(0, 80),
       });
 
       if (
         !writeEvent('intent', {
-          intent: intentResult.intent,
-          confidence: intentResult.confidence,
+          intent: resolvedMeta.intent,
+          confidence: resolvedMeta.confidence,
         })
       )
         return;
 
-      const responseType = INTENT_RESPONSE_TYPE[intentResult.intent];
-      let contentType: 'text' | 'form_card' | 'layout_command' | 'patch' =
-        'text';
+      if (documentChanged) {
+        await this.resumesRepository.updateDocumentForOwner(
+          session.resume_id,
+          userId,
+          document,
+        );
+        await this.resumesRepository.applyAutoTitleFromBasicsIfUnlocked(
+          session.resume_id,
+          userId,
+          document,
+        );
+        if (!writeEvent('document_updated', { document })) return;
+      }
+
+      let contentType: 'text' | 'form_card' | 'layout_command' = 'text';
       let contentJson: Record<string, unknown>;
 
-      if (responseType === 'patch') {
-        const patchFields = intentResult.extractedFields ?? {};
-        const patchableBasicsKeys = [
-          'fullName',
-          'email',
-          'phone',
-          'location',
-          'headline',
-          'summary',
-        ];
-        const basicsPatch: Record<string, string> = {};
-        for (const [k, v] of Object.entries(patchFields)) {
-          if (patchableBasicsKeys.includes(k)) {
-            basicsPatch[k] = typeof v === 'string' ? v : String(v ?? '');
-          }
-        }
+      const formAction = turn.uiActions.find((a) => a.type === 'form');
+      const previewAction = turn.uiActions.find((a) => a.type === 'preview');
+      const polishAction = turn.uiActions.find((a) => a.type === 'polish');
 
-        let patchApplied = false;
-        if (Object.keys(basicsPatch).length > 0) {
+      if (polishAction && polishAction.type === 'polish') {
+        const loc = findResumeItemLocation(document, polishAction.itemId);
+        if (loc) {
           try {
-            const session = await this.chatSessionsRepository.findById(
-              sessionId,
+            const created = await this.polishJobsService.createPolishJob(
+              userId,
+              {
+                resumeId: session.resume_id,
+                target: {
+                  moduleId: loc.moduleId,
+                  itemId: loc.itemId,
+                  bulletIndex: polishAction.bulletIndex,
+                },
+              },
+              requestId,
             );
-            if (session) {
-              const resume = await this.resumesRepository.findByIdForOwner(
-                session.resume_id,
-                userId,
-              );
-              if (resume?.document_json) {
-                const doc = resumeDocumentSchema.safeParse(
-                  resume.document_json,
-                );
-                if (doc.success) {
-                  const updated = {
-                    ...doc.data,
-                    basics: { ...doc.data.basics, ...basicsPatch },
-                  };
-                  const validated = patchResumeBodySchema.safeParse({
-                    document: updated,
-                  });
-                  if (validated.success) {
-                    await this.resumesRepository.updateDocumentForOwner(
-                      session.resume_id,
-                      userId,
-                      validated.data.document,
-                    );
-                    patchApplied = true;
-                  }
-                }
-              }
-            }
+            if (
+              !writeEvent('polish_job', {
+                jobId: created.jobId,
+                target: {
+                  moduleId: loc.moduleId,
+                  itemId: loc.itemId,
+                  bulletIndex: polishAction.bulletIndex,
+                },
+              })
+            )
+              return;
           } catch (e) {
             this.logger.warn({
-              msg: 'patch_field_failed',
+              msg: 'resume_agent_polish_job_failed',
               requestId,
               sessionId,
+              itemId: polishAction.itemId,
               error: e instanceof Error ? e.message : String(e),
             });
           }
         }
+      }
 
-        if (patchApplied) {
-          if (
-            !writeEvent('document_patched', {
-              patchedFields: basicsPatch,
-            })
-          )
-            return;
-        }
-
-        const replyText =
-          intentResult.responseText ??
-          (patchApplied ? '已为你更新。' : '未能识别要修改的字段。');
-        if (!writeEvent('token', { text: replyText })) return;
-
-        contentType = 'text';
-        contentJson = {
-          type: 'text',
-          role: 'assistant',
-          text: replyText,
-        };
-      } else if (responseType === 'form_card') {
-        const formType = intentToFormType(
-          intentResult.intent as ChatIntent,
-          intentResult.extractedFields,
-        );
+      if (formAction && formAction.type === 'form') {
+        const formType = agentFormTypeToFormType(formAction.formType);
         if (!formType) {
-          throw new Error('invalid form intent mapping');
+          throw new Error('invalid form type from resume agent');
         }
         const fields = buildDefaultFields(
           formType,
-          intentResult.extractedFields,
+          formAction.prefilledFields,
         );
-
-        const formLeadIn = buildFormCardLeadIn({
-          formType,
-          modelResponseText: intentResult.responseText,
-          resumeSummary,
-        });
+        const formLeadIn =
+          formAction.leadIn ??
+          buildFormCardLeadIn({
+            formType,
+            resumeSummary,
+          });
 
         if (
           !writeEvent('form', {
             formType,
             fields,
             leadIn: formLeadIn,
-            extractedFields: intentResult.extractedFields ?? {},
+            extractedFields: formAction.prefilledFields ?? {},
           })
         )
           return;
@@ -646,10 +644,9 @@ export class ChatSessionsService {
           fields,
           leadIn: formLeadIn,
         };
-      } else if (responseType === 'layout_command') {
+      } else if (previewAction) {
         if (!writeEvent('command', { command: 'show_preview', params: {} }))
           return;
-
         contentType = 'layout_command';
         contentJson = {
           type: 'layout_command',
@@ -658,109 +655,52 @@ export class ChatSessionsService {
           params: {},
         };
       } else {
-        let fullText = '';
-        let responseSource: 'stream' | 'intent_responseText' | 'empty' = 'empty';
-        const systemPromptLines = [
-          '你是一个专业的简历辅导顾问。请用中文回复，保持友好和专业。',
-        ];
-        if (resumeSummary) {
-          systemPromptLines.push(`\n当前简历状态：\n${resumeSummary}`);
-        }
-        if (isSystemEvent) {
-          systemPromptLines.push(
-            `\n当前输入是一条「表单/模块保存成功」的系统事件。请用 2～4 句中文简短回复：\n` +
-              `1）确认刚保存的模块；\n` +
-              `2）结合「当前简历状态」概括整体进度（还缺哪些模块即可，避免与状态矛盾）；\n` +
-              `3）**不要**写「猜你想做」、不要用「·」列举下一步（对话区底部已有快捷按钮，勿重复其文案）；\n` +
-              `4）全文约 60～120 字；可用一句提示用户点击下方快捷按钮继续。`,
-          );
-        }
-        if (intentResult.responseText) {
-          systemPromptLines.push(
-            `\n参考意图分析结果，请据此展开回答：${intentResult.responseText}`,
-          );
-        }
-
-        this.emitLlmDebug(writeEvent, {
-          step: 'stream_chat_start',
-          provider: this.llmGateway.providerName,
-          requestId,
-          sessionId,
-          responseType,
-        });
-
-        try {
-          await this.llmGateway.streamChat({
-            messages: [
-              { role: 'system', content: systemPromptLines.join('\n') },
-              {
-                role: 'user',
-                content: isSystemEvent ? dispatchUserMessage : parsed.content,
-              },
-            ],
-            sessionId,
-            requestId,
-            onToken: async (text) => {
-              fullText += text;
-              writeEvent('token', { text });
-            },
-            onDone: async () => {
-              return;
-            },
-          });
-          responseSource = 'stream';
-          this.emitLlmDebug(writeEvent, {
-            step: 'stream_chat_done',
-            provider: this.llmGateway.providerName,
-            requestId,
-            sessionId,
-            fullTextLength: fullText.length,
-            fullTextPreview: fullText.slice(0, 80),
-          });
-        } catch (streamErr) {
-          const streamError =
-            streamErr instanceof Error ? streamErr.message : String(streamErr);
-          this.logger.warn({
-            msg: 'stream_chat_fallback',
-            requestId,
-            sessionId,
-            error: streamError,
-          });
-          this.emitLlmDebug(writeEvent, {
-            step: 'stream_chat_fallback',
-            provider: this.llmGateway.providerName,
-            requestId,
-            sessionId,
-            error: streamError,
-            hadPartialStream: fullText.length > 0,
-            partialTextPreview: fullText.slice(0, 80),
-          });
-          if (!fullText) {
-            fullText = intentResult.responseText ?? '';
-            responseSource = 'intent_responseText';
-            if (!writeEvent('token', { text: fullText })) return;
-          }
-        }
-
-        this.emitLlmDebug(writeEvent, {
-          step: 'response_ready',
-          provider: this.llmGateway.providerName,
-          requestId,
-          sessionId,
-          responseSource,
-          finalTextPreview: fullText.slice(0, 80),
-        });
-
         contentType = 'text';
         contentJson = {
           type: 'text',
           role: 'assistant',
-          text: fullText,
+          text: '',
         };
       }
 
-      if (isLowConfidence && suggestions.length > 0) {
-        if (!writeEvent('suggestions', { items: suggestions })) return;
+      const toolErrors = toolResults
+        .filter((r) => !r.ok && r.error)
+        .map((r) => r.error as string);
+      const polishStarted =
+        polishAction?.type === 'polish' &&
+        !!findResumeItemLocation(document, polishAction.itemId);
+
+      let replyText = buildAgentReply({
+        meta: resolvedMeta,
+        documentChanged,
+        mutationCalls: turn.mutationCalls,
+        toolErrors,
+        hasFormCard: !!formAction,
+        hasPreview: !!previewAction,
+        hasPolishJob: polishStarted,
+      });
+      const legacyText = turn.responseText.trim();
+      if (legacyText.length > 0 && legacyText.length <= 60) {
+        replyText = legacyText;
+      }
+
+      if (!writeEvent('token', { text: replyText })) return;
+      if (contentJson.type === 'text') {
+        (contentJson as { text: string }).text = replyText;
+      }
+
+      const completion = analyzeResumeCompletion(document);
+      // 已弹出表单时不再推送「猜你想做」，避免与「请先填表」这一主任务抢注意力
+      if (
+        contentType !== 'form_card' &&
+        completion.suggestionPhrases.length > 0
+      ) {
+        if (
+          !writeEvent('suggestions', {
+            items: completion.suggestionPhrases,
+          })
+        )
+          return;
       }
 
       const assistantRow = await this.chatMessagesRepository.insertMessage({
@@ -768,7 +708,7 @@ export class ChatSessionsService {
         role: 'assistant',
         contentType,
         contentJson,
-        intent: intentResult.intent,
+        intent: resolvedMeta.intent,
       });
 
       if (!writeEvent('done', { messageId: assistantRow.id, usage: {} })) {

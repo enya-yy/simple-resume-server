@@ -14,6 +14,7 @@ import {
   patchResumeBodySchema,
   patchResumeResponseSchema,
   resumeDocumentSchema,
+  type ResumeDocument,
 } from '../../contracts/index';
 import { ZodError } from 'zod';
 import { ResumesRepository } from './resumes.repository';
@@ -72,6 +73,7 @@ export class ResumesService {
     try {
       return loadResumeResponseSchema.parse({
         resumeId: row.id,
+        title: row.title,
         document: row.document_json,
         schemaVersion: row.schema_version,
       });
@@ -118,53 +120,105 @@ export class ResumesService {
       });
     }
 
-    let existingDoc;
-    try {
-      existingDoc = resumeDocumentSchema.parse(existing.document_json);
-    } catch (e) {
-      if (e instanceof ZodError) {
-        this.logger.error({
-          msg: 'resume_patch_existing_document_invalid',
-          resumeId,
-          userId,
-          issues: e.flatten(),
-        });
-        throw new UnprocessableEntityException({
-          code: ERROR_CODES.RESUME_DOCUMENT_INVALID,
-          message:
-            '当前简历数据格式异常，暂无法保存修改。请联系支持并附上 requestId。',
+    let updated = existing;
+
+    if (parsed.document !== undefined) {
+      let existingDoc;
+      try {
+        existingDoc = resumeDocumentSchema.parse(existing.document_json);
+      } catch (e) {
+        if (e instanceof ZodError) {
+          this.logger.error({
+            msg: 'resume_patch_existing_document_invalid',
+            resumeId,
+            userId,
+            issues: e.flatten(),
+          });
+          throw new UnprocessableEntityException({
+            code: ERROR_CODES.RESUME_DOCUMENT_INVALID,
+            message:
+              '当前简历数据格式异常，暂无法保存修改。请联系支持并附上 requestId。',
+          });
+        }
+        throw e;
+      }
+      const mergedBasicsSensitive =
+        parsed.document.basicsSensitive !== undefined
+          ? {
+              ...(existingDoc.basicsSensitive ?? {}),
+              ...parsed.document.basicsSensitive,
+            }
+          : existingDoc.basicsSensitive;
+      const documentToSave = {
+        ...parsed.document,
+        layoutOptions:
+          parsed.document.layoutOptions ?? existingDoc.layoutOptions,
+        basicsSensitive: mergedBasicsSensitive,
+      };
+
+      const row = await this.resumesRepository.updateDocumentForOwner(
+        resumeId,
+        userId,
+        documentToSave,
+      );
+      if (!row) {
+        throw new NotFoundException({
+          code: ERROR_CODES.RESUME_NOT_FOUND,
+          message: '简历不存在',
         });
       }
-      throw e;
-    }
-    const mergedBasicsSensitive =
-      parsed.document.basicsSensitive !== undefined
-        ? {
-            ...(existingDoc.basicsSensitive ?? {}),
-            ...parsed.document.basicsSensitive,
-          }
-        : existingDoc.basicsSensitive;
-    const documentToSave = {
-      ...parsed.document,
-      layoutOptions: parsed.document.layoutOptions ?? existingDoc.layoutOptions,
-      basicsSensitive: mergedBasicsSensitive,
-    };
+      updated = row;
 
-    const updated = await this.resumesRepository.updateDocumentForOwner(
-      resumeId,
-      userId,
-      documentToSave,
-    );
-    if (!updated) {
-      throw new NotFoundException({
-        code: ERROR_CODES.RESUME_NOT_FOUND,
-        message: '简历不存在',
-      });
+      try {
+        const savedDoc = resumeDocumentSchema.parse(
+          documentToSave,
+        ) as ResumeDocument;
+        await this.resumesRepository.applyAutoTitleFromBasicsIfUnlocked(
+          resumeId,
+          userId,
+          savedDoc,
+        );
+        const refreshed = await this.resumesRepository.findByIdForOwner(
+          resumeId,
+          userId,
+        );
+        if (refreshed) {
+          updated = refreshed;
+        }
+      } catch (e) {
+        if (e instanceof ZodError) {
+          this.logger.warn({
+            msg: 'resume_auto_title_skipped_invalid_doc',
+            resumeId,
+            userId,
+          });
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    if (parsed.title !== undefined) {
+      const lock = parsed.lockTitle ?? true;
+      const row = await this.resumesRepository.setTitleForOwner(
+        resumeId,
+        userId,
+        parsed.title,
+        lock,
+      );
+      if (!row) {
+        throw new NotFoundException({
+          code: ERROR_CODES.RESUME_NOT_FOUND,
+          message: '简历不存在',
+        });
+      }
+      updated = row;
     }
 
     try {
       return patchResumeResponseSchema.parse({
         resumeId: updated.id,
+        title: updated.title,
         document: updated.document_json,
         schemaVersion: updated.schema_version,
       });

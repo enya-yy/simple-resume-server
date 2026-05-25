@@ -13,7 +13,7 @@
   "properties": {
     "templateId": {
       "type": "string",
-      "enum": ["classic-list", "professional-two-column"],
+      "enum": ["classic-list", "professional-two-column", "executive-navy"],
       "description": "预览模板 ID；读库宽松解析时非法值会回落为 classic-list"
     },
     "layoutOptions": {

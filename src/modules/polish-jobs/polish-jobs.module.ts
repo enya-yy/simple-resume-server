@@ -10,5 +10,6 @@ import { PolishJobsService } from './polish-jobs.service';
   imports: [ResumesModule],
   controllers: [PolishJobsController],
   providers: [PolishJobsService, PolishJobsRepository, CsrfService, CsrfGuard],
+  exports: [PolishJobsService],
 })
 export class PolishJobsModule {}

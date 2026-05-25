@@ -69,6 +69,32 @@ export class ChatMessagesRepository {
     return result.rows[0] ?? null;
   }
 
+  /** 最近 N 条消息，按时间正序（不含 excludeMessageId）。 */
+  async listRecentBySession(
+    sessionId: string,
+    limit: number,
+    excludeMessageId?: string,
+  ): Promise<ChatMessageDbRow[]> {
+    const result = excludeMessageId
+      ? await this.pool.query<ChatMessageDbRow>(
+          `SELECT id, session_id, role, content_type, content_json, intent, created_at
+           FROM chat_messages
+           WHERE session_id = $1 AND id != $2
+           ORDER BY created_at DESC
+           LIMIT $3`,
+          [sessionId, excludeMessageId, limit],
+        )
+      : await this.pool.query<ChatMessageDbRow>(
+          `SELECT id, session_id, role, content_type, content_json, intent, created_at
+           FROM chat_messages
+           WHERE session_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [sessionId, limit],
+        );
+    return result.rows.reverse();
+  }
+
   async listBySession(
     sessionId: string,
     limit = 50,

@@ -13,12 +13,14 @@ import type {
 export const RESUME_TEMPLATE_IDS = [
   'classic-list',
   'professional-two-column',
+  'executive-navy',
 ] as const satisfies readonly ResumeTemplateId[];
 
 /** 模版库与编辑器内选择器共用文案，避免漂移 */
 export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplateId, string> = {
   'classic-list': '经典列表',
   'professional-two-column': '专业双栏',
+  'executive-navy': '深蓝菁英',
 };
 
 export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'classic-list';
@@ -107,7 +109,10 @@ export function templateSupportsLayoutDimension(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): boolean {
-  if (templateId === 'professional-two-column' && dimension === 'pageMargin') {
+  if (
+    (templateId === 'professional-two-column' || templateId === 'executive-navy') &&
+    dimension === 'pageMargin'
+  ) {
     return false;
   }
   return true;
@@ -117,7 +122,10 @@ export function layoutDimensionDisabledHint(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): string | undefined {
-  if (templateId === 'professional-two-column' && dimension === 'pageMargin') {
+  if (
+    (templateId === 'professional-two-column' || templateId === 'executive-navy') &&
+    dimension === 'pageMargin'
+  ) {
     return '双栏模板为固定版心，暂不支持切换页边距';
   }
   return undefined;
@@ -422,10 +430,23 @@ const patchResumeDocumentShape = z
   })
   .strict();
 
-/** PATCH /resumes/:resumeId — 更新正文 JSON */
-export const patchResumeBodySchema = z.object({
-  document: patchResumeDocumentShape,
-});
+export const patchResumeTitleSchema = z
+  .string()
+  .trim()
+  .min(1, { message: '标题不能为空' })
+  .max(80, { message: '标题最多 80 字' });
+
+/** PATCH /resumes/:resumeId — 更新正文和/或库内展示名 */
+export const patchResumeBodySchema = z
+  .object({
+    document: patchResumeDocumentShape.optional(),
+    title: patchResumeTitleSchema.optional(),
+    /** 显式传 title 时默认锁定，禁止后续自动覆盖；自动命名时传 false */
+    lockTitle: z.boolean().optional(),
+  })
+  .refine((body) => body.document !== undefined || body.title !== undefined, {
+    message: '至少需要 document 或 title',
+  });
 
 export type PatchResumeBody = z.infer<typeof patchResumeBodySchema>;
 
@@ -470,6 +491,7 @@ export const listResumesResponseSchema = z.object({
 
 export const loadResumeResponseSchema = z.object({
   resumeId: resumeIdSchema,
+  title: z.string(),
   document: resumeDocumentSchema,
   schemaVersion: z.number().int().positive(),
 });

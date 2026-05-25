@@ -1,15 +1,17 @@
 import { Module } from '@nestjs/common';
 import { CsrfGuard } from '../../common/guards/csrf.guard';
 import { CsrfService } from '../auth/csrf.service';
+import { PolishJobsModule } from '../polish-jobs/polish-jobs.module';
 import { ResumesModule } from '../resumes/resumes.module';
 import { ChatMessagesRepository } from './chat-messages.repository';
 import { ChatSessionsController } from './chat-sessions.controller';
 import { ChatSessionsRepository } from './chat-sessions.repository';
 import { ChatSessionsService } from './chat-sessions.service';
-import { IntentDispatcherService } from './intent-dispatcher.service';
+import { ResumeAgentService } from '../resume-agent/resume-agent.service';
+import { ResumeToolExecutorService } from '../resume-agent/resume-tool-executor.service';
 
 @Module({
-  imports: [ResumesModule],
+  imports: [ResumesModule, PolishJobsModule],
   controllers: [ChatSessionsController],
   providers: [
     ChatSessionsService,
@@ -17,7 +19,8 @@ import { IntentDispatcherService } from './intent-dispatcher.service';
     ChatMessagesRepository,
     CsrfService,
     CsrfGuard,
-    IntentDispatcherService,
+    ResumeAgentService,
+    ResumeToolExecutorService,
   ],
   exports: [ChatSessionsRepository, ChatMessagesRepository],
 })

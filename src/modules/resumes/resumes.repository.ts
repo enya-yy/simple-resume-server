@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
+  deriveResumeTitleFromBasics,
   EMPTY_RESUME_DOCUMENT,
   resumeDocumentSchema,
+  type ResumeDocument,
 } from '../../contracts/index';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PgLikePool } from '@simple-resume/sqlite-pg';
@@ -24,9 +26,15 @@ export interface ResumeRowForOwner {
   id: string;
   user_id: string;
   title: string;
+  title_locked: number;
   document_json: unknown;
   schema_version: number;
   updated_at: Date;
+}
+
+export interface ResumeTitleMetaRow {
+  title: string;
+  title_locked: number;
 }
 
 @Injectable()
@@ -52,8 +60,8 @@ export class ResumesRepository {
     const sessionId = randomUUID();
     await this.pool.transaction(async (client) => {
       await client.query(
-        `INSERT INTO resumes (id, user_id, title, document_json, schema_version)
-         VALUES ($1, $2, $3, $4::jsonb, $5)
+        `INSERT INTO resumes (id, user_id, title, title_locked, document_json, schema_version)
+         VALUES ($1, $2, $3, 0, $4::jsonb, $5)
          RETURNING id`,
         [resumeId, userId, '未命名简历', JSON.stringify(documentJson), 1],
       );
@@ -76,7 +84,7 @@ export class ResumesRepository {
     userId: string,
   ): Promise<ResumeRowForOwner | undefined> {
     const result = await this.pool.query<ResumeRowForOwner>(
-      `SELECT id, user_id, title, document_json, schema_version, updated_at
+      `SELECT id, user_id, title, title_locked, document_json, schema_version, updated_at
        FROM resumes
        WHERE id = $1 AND user_id = $2
        LIMIT 1`,
@@ -95,10 +103,75 @@ export class ResumesRepository {
           SET document_json = $3::jsonb,
               updated_at = now()
         WHERE id = $1 AND user_id = $2
-      RETURNING id, user_id, title, document_json, schema_version, updated_at`,
+      RETURNING id, user_id, title, title_locked, document_json, schema_version, updated_at`,
       [resumeId, userId, JSON.stringify(documentJson)],
     );
     return result.rows[0];
+  }
+
+  async findTitleMetaForOwner(
+    resumeId: string,
+    userId: string,
+  ): Promise<ResumeTitleMetaRow | undefined> {
+    const result = await this.pool.query<ResumeTitleMetaRow>(
+      `SELECT title, title_locked
+       FROM resumes
+       WHERE id = $1 AND user_id = $2
+       LIMIT 1`,
+      [resumeId, userId],
+    );
+    return result.rows[0];
+  }
+
+  async syncActiveSessionTitleForResume(
+    resumeId: string,
+    userId: string,
+    title: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE chat_sessions
+          SET title = $3, updated_at = now()
+        WHERE resume_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [resumeId, userId, title],
+    );
+  }
+
+  async setTitleForOwner(
+    resumeId: string,
+    userId: string,
+    title: string,
+    lock: boolean,
+  ): Promise<ResumeRowForOwner | undefined> {
+    const lockedVal = lock ? 1 : 0;
+    const result = await this.pool.query<ResumeRowForOwner>(
+      `UPDATE resumes
+          SET title = $3,
+              title_locked = $4,
+              updated_at = now()
+        WHERE id = $1 AND user_id = $2
+      RETURNING id, user_id, title, title_locked, document_json, schema_version, updated_at`,
+      [resumeId, userId, title, lockedVal],
+    );
+    const row = result.rows[0];
+    if (row) {
+      await this.syncActiveSessionTitleForResume(resumeId, userId, title);
+    }
+    return row;
+  }
+
+  /** 未锁定时根据 basics 自动更新库内展示名，并同步活跃会话标题 */
+  async applyAutoTitleFromBasicsIfUnlocked(
+    resumeId: string,
+    userId: string,
+    document: ResumeDocument,
+  ): Promise<void> {
+    const meta = await this.findTitleMetaForOwner(resumeId, userId);
+    if (!meta || meta.title_locked) return;
+
+    const next = deriveResumeTitleFromBasics(document.basics);
+    if (!next || next === meta.title) return;
+
+    await this.setTitleForOwner(resumeId, userId, next, false);
   }
 
   /**
@@ -159,8 +232,8 @@ export class ResumesRepository {
         document_json: unknown;
         schema_version: number;
       }>(
-        `INSERT INTO resumes (id, user_id, title, document_json, schema_version)
-         VALUES ($1, $2, $3, $4::jsonb, $5)
+        `INSERT INTO resumes (id, user_id, title, title_locked, document_json, schema_version)
+         VALUES ($1, $2, $3, 1, $4::jsonb, $5)
          RETURNING id, document_json, schema_version`,
         [
           newResumeId,

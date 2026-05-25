@@ -18,11 +18,14 @@ const dbPath = resolveSqliteFilePath(
 );
 
 const migrationsDir = path.join(__dirname, '..', 'migrations', 'sqlite');
-const sqlFile = path.join(migrationsDir, '001_initial.sql');
+const migrationFiles = ['001_initial.sql', '002_resume_title_locked.sql'];
 
-if (!fs.existsSync(sqlFile)) {
-  console.error('Missing migration file:', sqlFile);
-  process.exit(1);
+for (const file of migrationFiles) {
+  const full = path.join(migrationsDir, file);
+  if (!fs.existsSync(full)) {
+    console.error('Missing migration file:', full);
+    process.exit(1);
+  }
 }
 
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -38,26 +41,42 @@ db.exec(`
   );
 `);
 
-const name = '001_initial';
-const done = db.prepare('SELECT 1 FROM _schema_migrations WHERE name = ?').get(name);
-const sql = fs.readFileSync(sqlFile, 'utf8');
+for (const file of migrationFiles) {
+  const name = file.replace(/\.sql$/, '');
+  const sqlPath = path.join(migrationsDir, file);
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  const done = db
+    .prepare('SELECT 1 FROM _schema_migrations WHERE name = ?')
+    .get(name);
 
-db.exec('BEGIN IMMEDIATE');
-try {
-  // Keep this bootstrap migration idempotent for old local DBs where 001
-  // was marked applied before new tables were appended to 001_initial.sql.
-  db.exec(sql);
-  if (!done) {
-    db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
-    console.log('SQLite migrations: applied', name);
-  } else {
-    console.log('SQLite migrations: reconciled', name);
+  if (name === '002_resume_title_locked') {
+    const cols = db.prepare('PRAGMA table_info(resumes)').all();
+    if (cols.some((c) => c.name === 'title_locked')) {
+      if (!done) {
+        db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
+      }
+      console.log('SQLite migrations: skipped (column exists)', name);
+      continue;
+    }
   }
-  db.exec('COMMIT');
-} catch (e) {
-  db.exec('ROLLBACK');
-  console.error(e);
-  process.exit(1);
-} finally {
-  db.close();
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.exec(sql);
+    if (!done) {
+      db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
+      console.log('SQLite migrations: applied', name);
+    } else if (name === '001_initial') {
+      console.log('SQLite migrations: reconciled', name);
+    } else {
+      console.log('SQLite migrations: skipped (already applied)', name);
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    console.error('Migration failed:', name, e);
+    process.exit(1);
+  }
 }
+
+db.close();
