@@ -18,7 +18,11 @@ const dbPath = resolveSqliteFilePath(
 );
 
 const migrationsDir = path.join(__dirname, '..', 'migrations', 'sqlite');
-const migrationFiles = ['001_initial.sql', '002_resume_title_locked.sql'];
+const migrationFiles = [
+  '001_initial.sql',
+  '002_resume_title_locked.sql',
+  '003_import_jobs.sql',
+];
 
 for (const file of migrationFiles) {
   const full = path.join(migrationsDir, file);

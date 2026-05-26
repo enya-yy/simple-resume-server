@@ -1,7 +1,7 @@
 /**
  * OpenAI 兼容 Chat Completions（百炼 DashScope、DeepSeek 等；服务端/Worker 专用）。
  */
-import type { ChatAssistLlmBackend } from '../contracts/index';
+import type { ChatAssistLlmBackend } from '../../contracts/index';
 
 /** 可带上用户可读说明，供写入 chat_assist_jobs.error_message */
 export class OpenAiChatRequestError extends Error {

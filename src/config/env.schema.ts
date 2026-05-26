@@ -122,6 +122,29 @@ const envSchema = z
       .string()
       .optional()
       .transform((v) => v === 'true'),
+
+    /** 导入：单文件最大字节数（默认 10MB） */
+    IMPORT_MAX_FILE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10 * 1024 * 1024),
+    /** 导入 LLM 调用超时（毫秒）；含 OCR + 结构化解析，默认 3 分钟 */
+    IMPORT_LLM_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(180_000),
+    /** Vision 模型（图片 OCR / 扫描 PDF fallback） */
+    DASHSCOPE_VISION_MODEL: z.string().default('qwen-vl-max'),
+    DEEPSEEK_VISION_MODEL: z.string().default('deepseek-chat'),
+    /** 每用户每小时导入次数上限 */
+    IMPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
+    /** 为 true 时在 import_jobs 中保存 extracted_text（调试） */
+    IMPORT_DEBUG_STORE_EXTRACTED_TEXT: z
+      .string()
+      .optional()
+      .transform((v) => v === 'true'),
   })
   .superRefine((env, ctx) => {
     if (env.LLM_PROVIDER === 'dashscope' && !env.DASHSCOPE_API_KEY) {

@@ -51,6 +51,10 @@ export const ERROR_CODES = {
   CHAT_SESSION_FORBIDDEN: 'CHAT_SESSION_FORBIDDEN',
   /** partial unique 约束冲突：同一简历已有活跃会话 */
   CHAT_SESSION_RESUME_CONFLICT: 'CHAT_SESSION_RESUME_CONFLICT',
+  /** 导入任务不存在 */
+  IMPORT_JOB_NOT_FOUND: 'IMPORT_JOB_NOT_FOUND',
+  /** 导入请求过于频繁 */
+  IMPORT_RATE_LIMITED: 'IMPORT_RATE_LIMITED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

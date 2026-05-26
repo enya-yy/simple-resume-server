@@ -7,6 +7,8 @@ import {
   LLM_GATEWAY,
   type ResumeAgentDispatchInput,
 } from './llm-gateway.interface';
+import { runImportLlmPipeline } from './import/import-llm';
+import type { ResumeDocument } from '../../contracts/types/resume';
 import { parseEnv } from '../../config/env.schema';
 
 function errorMessage(err: unknown): string {
@@ -93,5 +95,25 @@ export class LlmGatewayService {
       });
       return FALLBACK_RESUME_AGENT_TURN;
     }
+  }
+
+  async dispatchResumeImport(input: {
+    extractedText: string;
+    imageBuffers?: Buffer[];
+    imageMime?: string;
+    signal?: AbortSignal;
+  }): Promise<ResumeDocument> {
+    this.logger.log({
+      msg: 'resume_import_dispatch_start',
+      provider: this.providerName,
+      textLength: input.extractedText.length,
+      imageCount: input.imageBuffers?.length ?? 0,
+    });
+    return runImportLlmPipeline({
+      extractedText: input.extractedText,
+      imageBuffers: input.imageBuffers ?? [],
+      imageMime: input.imageMime ?? 'image/png',
+      signal: input.signal,
+    });
   }
 }
