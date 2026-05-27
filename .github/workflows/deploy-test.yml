@@ -1,7 +1,14 @@
 name: deploy-test-server
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+concurrency:
+  group: deploy-test-server
+  cancel-in-progress: true
 
 env:
   TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST || '81.70.167.194' }}
