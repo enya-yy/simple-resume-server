@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  StreamableFile,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
@@ -17,6 +18,9 @@ export class TransformInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data: unknown) => {
+        if (data instanceof StreamableFile) {
+          return data;
+        }
         if (
           data &&
           typeof data === 'object' &&

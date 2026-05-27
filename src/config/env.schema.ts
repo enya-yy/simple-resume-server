@@ -71,6 +71,11 @@ const envSchema = z
       z.coerce.number().int().positive().default(900),
     ),
     /**
+     * 本地导出 PDF 存储根目录（未配置 S3 时 Worker 写入；API 经 `/export-jobs/:id/artifact` 下载）。
+     * 绝对路径或相对 monorepo 根目录。
+     */
+    EXPORT_LOCAL_DIR: emptyToUndefined(z.string().min(1)).optional(),
+    /**
      * e2e / 无真实存储时：返回固定形态的 downloadUrl（不访问网络）
      */
     EXPORT_PRESIGN_STUB: z

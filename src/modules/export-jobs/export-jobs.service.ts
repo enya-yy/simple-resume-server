@@ -1,9 +1,12 @@
+import { createReadStream } from 'fs';
+import { access } from 'fs/promises';
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ERROR_CODES,
@@ -13,7 +16,12 @@ import {
 } from '../../contracts/index';
 import { ZodError } from 'zod';
 import { parseEnv } from '../../config/env.schema';
-import { presignExportDownload } from './export-artifact-presign';
+import {
+  isLocalExportStorageConfigured,
+  localExportFilePath,
+  resolveExportDownload,
+  resolveLocalExportRootDir,
+} from './export-artifact-download';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { ExportJobsRepository } from './export-jobs.repository';
 
@@ -80,10 +88,10 @@ export class ExportJobsService {
     let downloadUrlExpiresInSeconds: number | undefined;
     if (row.status === 'succeeded' && row.artifact_object_key) {
       try {
-        const signed = await presignExportDownload(
-          env,
-          row.artifact_object_key,
-        );
+        const signed = await resolveExportDownload(env, {
+          jobId: row.id,
+          objectKey: row.artifact_object_key,
+        });
         if (signed) {
           downloadUrl = signed.url;
           downloadUrlExpiresInSeconds = signed.expiresInSeconds;
@@ -114,5 +122,52 @@ export class ExportJobsService {
       throw new Error(`Export job response validation failed: ${detail}`);
     }
     return parsedRes.data;
+  }
+
+  async streamArtifact(
+    userId: string,
+    jobId: string,
+  ): Promise<StreamableFile> {
+    const env = parseEnv(process.env);
+    if (!isLocalExportStorageConfigured(env)) {
+      throw new NotFoundException({
+        code: ERROR_CODES.EXPORT_JOB_NOT_FOUND,
+        message: '导出产物不可用',
+      });
+    }
+    const row = await this.exportJobsRepository.findById(jobId);
+    if (!row) {
+      throw new NotFoundException({
+        code: ERROR_CODES.EXPORT_JOB_NOT_FOUND,
+        message: '导出任务不存在',
+      });
+    }
+    if (row.user_id !== userId) {
+      throw new ForbiddenException({
+        code: ERROR_CODES.AUTH_FORBIDDEN,
+        message: '无权访问该导出任务',
+      });
+    }
+    if (row.status !== 'succeeded' || !row.artifact_object_key) {
+      throw new NotFoundException({
+        code: ERROR_CODES.EXPORT_JOB_NOT_FOUND,
+        message: '导出产物尚未就绪',
+      });
+    }
+    const rootDir = resolveLocalExportRootDir(env);
+    const filePath = localExportFilePath(rootDir, row.artifact_object_key);
+    try {
+      await access(filePath);
+    } catch {
+      throw new NotFoundException({
+        code: ERROR_CODES.EXPORT_JOB_NOT_FOUND,
+        message: '导出文件不存在，请重新导出',
+      });
+    }
+    const stream = createReadStream(filePath);
+    return new StreamableFile(stream, {
+      type: row.artifact_content_type ?? 'application/pdf',
+      disposition: `attachment; filename="resume-export-${jobId.slice(0, 8)}.pdf"`,
+    });
   }
 }

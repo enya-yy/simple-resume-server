@@ -6,10 +6,13 @@ import {
 import type { PgLikePool } from "@simple-resume/sqlite-pg";
 import { ZodError } from "zod";
 
-import { parseWorkerS3Env } from "./config/s3-env.js";
+import {
+  monorepoRootFromModuleDir,
+  parseExportStorageTarget,
+} from "./config/export-storage.js";
 import { buildResumeExportHtml } from "./render/buildResumeExportHtml.js";
 import { renderHtmlToPdfBuffer } from "./render/renderPdf.js";
-import { uploadExportPdf } from "./storage/uploadExportArtifact.js";
+import { saveExportPdf } from "./storage/saveExportArtifact.js";
 
 const MSG_RENDER =
   "PDF 生成失败，请稍后重试。若问题持续，请联系支持并附上 requestId。";
@@ -62,8 +65,10 @@ export async function runExportJobStep(
       return;
     }
 
-    const s3Env = parseWorkerS3Env();
-    if (!s3Env) {
+    const storage = parseExportStorageTarget(
+      monorepoRootFromModuleDir(__dirname),
+    );
+    if (!storage) {
       await markExportFailed(
         pool,
         exportJobId,
@@ -118,15 +123,15 @@ export async function runExportJobStep(
     });
 
     try {
-      const masked = applySensitiveFieldPolicy(parsed);
+      const masked = applySensitiveFieldPolicy(parsed, { mask: false });
       const html = buildResumeExportHtml(masked);
       const pdf = await renderHtmlToPdfBuffer(html);
       try {
-        await uploadExportPdf(s3Env, objectKey, pdf);
+        await saveExportPdf(storage, objectKey, pdf);
       } catch (uploadErr) {
         const detail =
           uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-        console.error("[worker] S3 upload failed", exportJobId, detail);
+        console.error("[worker] export artifact save failed", exportJobId, detail);
         await markExportFailed(
           pool,
           exportJobId,

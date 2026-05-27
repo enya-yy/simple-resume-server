@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { buildResumeExportHtml } from "./buildResumeExportHtml.js";
 
+const baseLayout = {
+  fontSizeStep: 1 as const,
+  pageMargin: "standard" as const,
+  bodyLineHeight: "normal" as const,
+};
+
 describe("buildResumeExportHtml", () => {
-  it("mirrors ResumePreview class stack for layout options", () => {
+  it("uses rp-root class stack for layout options (classic-list)", () => {
     const html = buildResumeExportHtml({
       templateId: "classic-list",
       layoutOptions: {
@@ -35,22 +41,20 @@ describe("buildResumeExportHtml", () => {
         },
       ],
     });
-    expect(html).toContain("resume-preview-root--fs-2");
-    expect(html).toContain("resume-preview-root--margin-compact");
-    expect(html).toContain("resume-preview-root--lh-relaxed");
+    expect(html).toContain("rp-fs-2");
+    expect(html).toContain("rp-margin-compact");
+    expect(html).toContain("rp-lh-relaxed");
+    expect(html).toContain("rp-classic");
     expect(html).toContain("张三");
     expect(html).toContain("工作经历");
+    expect(html).not.toContain("resume-preview-module-list");
     expect(html).not.toContain("<script");
   });
 
   it("renders markdown in summary and bullets", () => {
     const html = buildResumeExportHtml({
       templateId: "classic-list",
-      layoutOptions: {
-        fontSizeStep: 1,
-        pageMargin: "standard",
-        bodyLineHeight: "normal",
-      },
+      layoutOptions: baseLayout,
       basics: {
         fullName: "",
         email: "",
@@ -112,23 +116,55 @@ describe("buildResumeExportHtml", () => {
         },
       ],
     });
-    expect(html).toContain("resume-preview-root--executive-navy");
-    expect(html).toContain("resume-preview-root--margin-standard");
+    expect(html).toContain("rp-root");
     expect(html).toContain("rp-two-col--executive-navy");
+    expect(html).toContain("rp-margin-standard");
     expect(html).toContain("李四");
     expect(html).toContain("前端工程师");
     expect(html).toContain("自我评价段落");
     expect(html).not.toContain("<script");
   });
 
+  it("uses professional two-column layout (not legacy module list)", () => {
+    const html = buildResumeExportHtml({
+      templateId: "professional-two-column",
+      layoutOptions: baseLayout,
+      basics: {
+        fullName: "王五",
+        email: "w@w.com",
+        phone: "1",
+        location: "北京",
+        headline: "产品经理",
+        summary: "简介",
+      },
+      sections: [
+        {
+          id: "s1",
+          type: "skill",
+          title: "技能",
+          order: 0,
+          items: [{ id: "i1", title: "Axure", bullets: ["熟练"] }],
+        },
+        {
+          id: "m1",
+          type: "experience",
+          title: "经历",
+          order: 1,
+          items: [{ id: "i2", title: "某公司", bullets: ["成果"] }],
+        },
+      ],
+    });
+    expect(html).toContain('<div class="rp-two-col">');
+    expect(html).not.toContain('<div class="rp-two-col rp-two-col--executive-navy">');
+    expect(html).toContain("Contact");
+    expect(html).not.toContain("resume-preview-module-list");
+    expect(html).toContain("王五");
+  });
+
   it("escapes HTML in user content", () => {
     const html = buildResumeExportHtml({
       templateId: "classic-list",
-      layoutOptions: {
-        fontSizeStep: 1,
-        pageMargin: "standard",
-        bodyLineHeight: "normal",
-      },
+      layoutOptions: baseLayout,
       basics: {
         fullName: "<img src=x onerror=alert(1)>",
         email: "",

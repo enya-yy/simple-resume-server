@@ -28,6 +28,19 @@ export class ExportJobsController {
     );
   }
 
+  @Get(':jobId/artifact')
+  @UseGuards(SessionAuthGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  async downloadArtifact(
+    @Req() req: Request,
+    @Param('jobId') jobId: string,
+  ) {
+    return this.exportJobsService.streamArtifact(
+      req.session.userId as string,
+      jobId,
+    );
+  }
+
   @Get(':jobId')
   @UseGuards(SessionAuthGuard)
   @Throttle({ default: { limit: 120, ttl: 60000 } })
