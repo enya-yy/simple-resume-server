@@ -14,11 +14,16 @@ import { SharesModule } from './modules/shares/shares.module';
 import { OpsMetricsModule } from './modules/ops-metrics/ops-metrics.module';
 import { ChatSessionsModule } from './modules/chat-sessions/chat-sessions.module';
 import { LlmGatewayModule } from './common/llm/llm-gateway.module';
+import { CreditsModule } from './modules/credits/credits.module';
+import { GuardsModule } from './common/guards/guards.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    GuardsModule,
     LlmGatewayModule,
+    CreditsModule,
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60000, limit: 200 }],
     }),
@@ -31,6 +36,7 @@ import { LlmGatewayModule } from './common/llm/llm-gateway.module';
     SharesModule,
     OpsMetricsModule,
     ChatSessionsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

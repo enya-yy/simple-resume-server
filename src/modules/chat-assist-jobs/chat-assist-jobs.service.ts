@@ -7,11 +7,13 @@ import {
 } from '@nestjs/common';
 import {
   ERROR_CODES,
+  CREDIT_ACTIONS,
   createChatAssistJobBodySchema,
   createChatAssistJobResponseSchema,
   getChatAssistJobResponseSchema,
 } from '../../contracts/index';
 import { ZodError } from 'zod';
+import { CreditsService } from '../credits/credits.service';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { ChatAssistJobsRepository } from './chat-assist-jobs.repository';
 
@@ -22,6 +24,7 @@ export class ChatAssistJobsService {
   constructor(
     private readonly chatAssistJobsRepository: ChatAssistJobsRepository,
     private readonly resumesRepository: ResumesRepository,
+    private readonly creditsService: CreditsService,
   ) {}
 
   async createChatAssistJob(userId: string, body: unknown) {
@@ -48,6 +51,8 @@ export class ChatAssistJobsService {
         message: '简历不存在',
       });
     }
+
+    await this.creditsService.spend(userId, CREDIT_ACTIONS.CHAT_ASSIST);
 
     const { id } = await this.chatAssistJobsRepository.insertQueued({
       userId,

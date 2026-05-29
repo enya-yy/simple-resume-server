@@ -39,7 +39,9 @@ const envSchema = z
     /** 逗号分隔的前端源，用于 CORS 白名单 */
     CORS_ORIGINS: z
       .string()
-      .default('http://localhost:5173,http://127.0.0.1:5173'),
+      .default(
+        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:9996,http://127.0.0.1:9996',
+      ),
     /**
      * Session cookie `Secure`：未设置时 production 为 `auto`（随连接是否 HTTPS），其它环境为 false。
      * 测试机仅 HTTP 时可显式设为 `false`。
@@ -145,6 +147,14 @@ const envSchema = z
     DEEPSEEK_VISION_MODEL: z.string().default('deepseek-chat'),
     /** 每用户每小时导入次数上限 */
     IMPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
+    /** 新用户注册时的试用额度 */
+    TRIAL_CREDITS_INITIAL: z.coerce.number().int().positive().default(30),
+    /** 每次 AI 对话消耗的额度 */
+    CREDITS_COST_CHAT: z.coerce.number().int().positive().default(1),
+    /** 每次简历导入消耗的额度 */
+    CREDITS_COST_IMPORT: z.coerce.number().int().positive().default(5),
+    /** 每次对话辅助消耗的额度 */
+    CREDITS_COST_CHAT_ASSIST: z.coerce.number().int().positive().default(1),
     /** 为 true 时在 import_jobs 中保存 extracted_text（调试） */
     IMPORT_DEBUG_STORE_EXTRACTED_TEXT: z
       .string()

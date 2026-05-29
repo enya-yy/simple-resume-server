@@ -14,8 +14,10 @@ import {
   IMPORT_ALLOWED_MIME_TYPES,
   createImportJobResponseSchema,
   getImportJobResponseSchema,
+  CREDIT_ACTIONS,
 } from '../../contracts/index';
 import { parseEnv } from '../../config/env.schema';
+import { CreditsService } from '../credits/credits.service';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { storeImportFile } from './import-file-storage';
 import { ImportJobsRepository } from './import-jobs.repository';
@@ -30,6 +32,7 @@ export class ImportJobsService {
   constructor(
     private readonly importJobsRepository: ImportJobsRepository,
     private readonly resumesRepository: ResumesRepository,
+    private readonly creditsService: CreditsService,
   ) {}
 
   async createImportJob(
@@ -98,6 +101,8 @@ export class ImportJobsService {
         });
       }
     }
+
+    await this.creditsService.spend(userId, CREDIT_ACTIONS.IMPORT);
 
     const created =
       await this.resumesRepository.createResumeWithDefaultDocument(userId);

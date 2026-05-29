@@ -20,6 +20,7 @@ import {
   EMPTY_RESUME_DOCUMENT,
   findResumeItemLocation,
   createChatSessionBodySchema,
+  CREDIT_ACTIONS,
   ERROR_CODES,
   patchChatFormCardMessageBodySchema,
   patchChatSessionBodySchema,
@@ -34,6 +35,7 @@ import { ZodError } from 'zod';
 import { LlmGatewayService } from '../../common/llm/llm-gateway.service';
 import type { LlmDebugPayload } from '../../common/llm/llm-debug';
 import { parseEnv } from '../../config/env.schema';
+import { CreditsService } from '../credits/credits.service';
 import { PolishJobsService } from '../polish-jobs/polish-jobs.service';
 import { ResumesRepository } from '../resumes/resumes.repository';
 import { ChatMessagesRepository } from './chat-messages.repository';
@@ -126,6 +128,7 @@ export class ChatSessionsService {
     private readonly polishJobsService: PolishJobsService,
     private readonly resumesRepository: ResumesRepository,
     private readonly llmGateway: LlmGatewayService,
+    private readonly creditsService: CreditsService,
   ) {
     const env = parseEnv(process.env);
     this.llmDebug = env.LLM_DEBUG;
@@ -418,6 +421,14 @@ export class ChatSessionsService {
     await this.assertSessionOwnership(userId, sessionId);
 
     const isSystemEvent = parsed.source === 'system_event';
+
+    if (!isSystemEvent) {
+      await this.creditsService.spend(
+        userId,
+        CREDIT_ACTIONS.CHAT_MESSAGE,
+        sessionId,
+      );
+    }
 
     const userRow = await this.chatMessagesRepository.insertMessage({
       sessionId,

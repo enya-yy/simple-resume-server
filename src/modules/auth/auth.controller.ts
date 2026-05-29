@@ -47,6 +47,6 @@ export class AuthController {
   @SkipThrottle()
   @UseGuards(SessionAuthGuard)
   me(@Req() req: Request) {
-    return this.auth.me(req.session.userId as string);
+    return this.auth.me(req.session.userId as string, req);
   }
 }

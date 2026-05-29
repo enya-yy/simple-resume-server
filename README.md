@@ -71,3 +71,15 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](LICENSE).
+
+## 管理后台（admin API）
+
+运营端前端在仓库同级目录 [`../admin/`](../admin/)。后端提供 `/admin/*`（需 `users.role = admin` 且 Session 登录）。
+
+**首个管理员**（迁移 `005_admin_users.sql` 之后）：
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'your@email.com';
+```
+
+本地 CORS 需包含管理端源（如 `http://localhost:5174`），见 `.env.example` 中的 `CORS_ORIGINS`。

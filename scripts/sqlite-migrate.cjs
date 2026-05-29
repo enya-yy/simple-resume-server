@@ -22,6 +22,8 @@ const migrationFiles = [
   '001_initial.sql',
   '002_resume_title_locked.sql',
   '003_import_jobs.sql',
+  '004_user_credits.sql',
+  '005_admin_users.sql',
 ];
 
 for (const file of migrationFiles) {
@@ -62,6 +64,56 @@ for (const file of migrationFiles) {
       console.log('SQLite migrations: skipped (column exists)', name);
       continue;
     }
+  }
+
+  if (name === '004_user_credits') {
+    const userCols = db.prepare('PRAGMA table_info(users)').all();
+    const hasCreditsBalance = userCols.some((c) => c.name === 'credits_balance');
+    const hasPlan = userCols.some((c) => c.name === 'plan');
+
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!hasCreditsBalance) {
+        db.exec(
+          'ALTER TABLE users ADD COLUMN credits_balance INTEGER NOT NULL DEFAULT 30',
+        );
+      }
+      if (!hasPlan) {
+        db.exec(
+          "ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'trial'",
+        );
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS credit_ledger (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+          delta INTEGER NOT NULL,
+          reason TEXT NOT NULL,
+          ref_id TEXT,
+          balance_after INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_credit_ledger_user ON credit_ledger (user_id);
+        CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON credit_ledger (user_id, created_at);
+      `);
+      if (!done) {
+        db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
+        console.log(
+          hasCreditsBalance || hasPlan
+            ? 'SQLite migrations: reconciled'
+            : 'SQLite migrations: applied',
+          name,
+        );
+      } else {
+        console.log('SQLite migrations: skipped (already applied)', name);
+      }
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('Migration failed:', name, e);
+      process.exit(1);
+    }
+    continue;
   }
 
   db.exec('BEGIN IMMEDIATE');

@@ -7,17 +7,23 @@ import * as argon2 from 'argon2';
 import type { Request } from 'express';
 import {
   ERROR_CODES,
+  authMeResponseSchema,
   loginBodySchema,
   registerBodySchema,
 } from '../../contracts/index';
 import { ZodError } from 'zod';
+import { parseEnv } from '../../config/env.schema';
+import { CreditsService } from '../credits/credits.service';
 import { UsersRepository } from './users.repository';
 
 const GENERIC_AUTH_MESSAGE = '邮箱或密码不正确';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly users: UsersRepository) {}
+  constructor(
+    private readonly users: UsersRepository,
+    private readonly credits: CreditsService,
+  ) {}
 
   private regenerateSession(req: Request): Promise<void> {
     return new Promise<void>((resolve, reject) => {
@@ -40,9 +46,10 @@ export class AuthService {
     }
 
     const hash = await argon2.hash(parsed.password, { type: argon2.argon2id });
+    const trialCredits = parseEnv(process.env).TRIAL_CREDITS_INITIAL;
 
     try {
-      const user = await this.users.create(parsed.email, hash);
+      const user = await this.users.create(parsed.email, hash, trialCredits);
       await this.regenerateSession(req);
       req.session.userId = user.id;
       return { userId: user.id };
@@ -88,6 +95,13 @@ export class AuthService {
       });
     }
 
+    if (user.disabled_at) {
+      throw new UnauthorizedException({
+        code: ERROR_CODES.AUTH_ACCOUNT_DISABLED,
+        message: '账号已禁用',
+      });
+    }
+
     await this.regenerateSession(req);
     req.session.userId = user.id;
     return { userId: user.id };
@@ -99,7 +113,7 @@ export class AuthService {
     });
   }
 
-  async me(userId: string) {
+  async me(userId: string, req?: Request) {
     const user = await this.users.findById(userId);
     if (!user) {
       throw new UnauthorizedException({
@@ -107,6 +121,20 @@ export class AuthService {
         message: '需要登录后才能访问',
       });
     }
-    return { id: user.id, email: user.email };
+    if (user.disabled_at) {
+      if (req) {
+        await this.logout(req);
+      }
+      throw new UnauthorizedException({
+        code: ERROR_CODES.AUTH_ACCOUNT_DISABLED,
+        message: '账号已禁用',
+      });
+    }
+    return authMeResponseSchema.parse({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      credits: await this.credits.getUsage(userId),
+    });
   }
 }
