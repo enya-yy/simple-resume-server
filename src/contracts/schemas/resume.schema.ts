@@ -11,23 +11,49 @@ import type {
 } from '../types/resume';
 
 export const RESUME_TEMPLATE_IDS = [
-  'classic-list',
-  'professional-two-column',
-  'executive-navy',
+  'amber-elegant',
+  'obsidian-gold',
 ] as const satisfies readonly ResumeTemplateId[];
+
+/** 双栏/侧栏模板（固定页边距） */
+export const SIDEBAR_TEMPLATE_IDS = [
+  'amber-elegant',
+  'obsidian-gold',
+] as const satisfies readonly ResumeTemplateId[];
+
+export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
+  return (SIDEBAR_TEMPLATE_IDS as readonly string[]).includes(templateId);
+}
 
 /** 模版库与编辑器内选择器共用文案，避免漂移 */
 export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplateId, string> = {
-  'classic-list': '经典列表',
-  'professional-two-column': '专业双栏',
-  'executive-navy': '深蓝菁英',
+  'amber-elegant': '琥珀雅致',
+  'obsidian-gold': '曜黑鎏金',
 };
 
-export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'classic-list';
+export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'amber-elegant';
+
+/** 读库时将已删除的旧 templateId 映射到新模板 */
+const LEGACY_TEMPLATE_ID_MAP: Record<string, ResumeTemplateId> = {
+  'classic-list': 'amber-elegant',
+  'minimal-dual': 'amber-elegant',
+  'professional-two-column': 'amber-elegant',
+  'header-icon': 'amber-elegant',
+  'creative-gradient': 'amber-elegant',
+  'sidebar-forest': 'amber-elegant',
+  'executive-navy': 'obsidian-gold',
+  'demo-amber-elegant': 'amber-elegant',
+  'demo-obsidian-gold': 'obsidian-gold',
+  'emerald-luxe': 'amber-elegant',
+  'demo-emerald-luxe': 'amber-elegant',
+};
 
 export const resumeTemplateIdSchema = z.enum(RESUME_TEMPLATE_IDS);
 
 function normalizeTemplateIdInput(raw: unknown): ResumeTemplateId {
+  if (typeof raw === 'string' && raw in LEGACY_TEMPLATE_ID_MAP) {
+    return LEGACY_TEMPLATE_ID_MAP[raw]!;
+  }
   const parsed = resumeTemplateIdSchema.safeParse(raw);
   return parsed.success ? parsed.data : DEFAULT_RESUME_TEMPLATE_ID;
 }
@@ -109,10 +135,7 @@ export function templateSupportsLayoutDimension(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): boolean {
-  if (
-    (templateId === 'professional-two-column' || templateId === 'executive-navy') &&
-    dimension === 'pageMargin'
-  ) {
+  if (isSidebarTemplateId(templateId) && dimension === 'pageMargin') {
     return false;
   }
   return true;
@@ -122,10 +145,7 @@ export function layoutDimensionDisabledHint(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): string | undefined {
-  if (
-    (templateId === 'professional-two-column' || templateId === 'executive-navy') &&
-    dimension === 'pageMargin'
-  ) {
+  if (isSidebarTemplateId(templateId) && dimension === 'pageMargin') {
     return '双栏模板为固定版心，暂不支持切换页边距';
   }
   return undefined;

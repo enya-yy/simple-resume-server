@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 import type {
   LayoutOptionDimension,
@@ -8,26 +8,52 @@ import type {
   ResumeLayoutOptions,
   ResumePageMargin,
   ResumeTemplateId,
-} from "../types/resume.js";
+} from '../types/resume';
 
 export const RESUME_TEMPLATE_IDS = [
-  "classic-list",
-  "professional-two-column",
-  "executive-navy",
+  'amber-elegant',
+  'obsidian-gold',
 ] as const satisfies readonly ResumeTemplateId[];
+
+/** 双栏/侧栏模板（固定页边距） */
+export const SIDEBAR_TEMPLATE_IDS = [
+  'amber-elegant',
+  'obsidian-gold',
+] as const satisfies readonly ResumeTemplateId[];
+
+export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
+  return (SIDEBAR_TEMPLATE_IDS as readonly string[]).includes(templateId);
+}
 
 /** 模版库与编辑器内选择器共用文案，避免漂移 */
 export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplateId, string> = {
-  "classic-list": "经典列表",
-  "professional-two-column": "专业双栏",
-  "executive-navy": "深蓝菁英",
+  'amber-elegant': '琥珀雅致',
+  'obsidian-gold': '曜黑鎏金',
 };
 
-export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = "classic-list";
+export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'amber-elegant';
+
+/** 读库时将已删除的旧 templateId 映射到新模板 */
+const LEGACY_TEMPLATE_ID_MAP: Record<string, ResumeTemplateId> = {
+  'classic-list': 'amber-elegant',
+  'minimal-dual': 'amber-elegant',
+  'professional-two-column': 'amber-elegant',
+  'header-icon': 'amber-elegant',
+  'creative-gradient': 'amber-elegant',
+  'sidebar-forest': 'amber-elegant',
+  'executive-navy': 'obsidian-gold',
+  'demo-amber-elegant': 'amber-elegant',
+  'demo-obsidian-gold': 'obsidian-gold',
+  'emerald-luxe': 'amber-elegant',
+  'demo-emerald-luxe': 'amber-elegant',
+};
 
 export const resumeTemplateIdSchema = z.enum(RESUME_TEMPLATE_IDS);
 
 function normalizeTemplateIdInput(raw: unknown): ResumeTemplateId {
+  if (typeof raw === 'string' && raw in LEGACY_TEMPLATE_ID_MAP) {
+    return LEGACY_TEMPLATE_ID_MAP[raw]!;
+  }
   const parsed = resumeTemplateIdSchema.safeParse(raw);
   return parsed.success ? parsed.data : DEFAULT_RESUME_TEMPLATE_ID;
 }
@@ -40,8 +66,8 @@ export const resumeTemplateIdLooseSchema = z.preprocess(
 
 export const DEFAULT_RESUME_LAYOUT_OPTIONS: ResumeLayoutOptions = {
   fontSizeStep: 1,
-  pageMargin: "standard",
-  bodyLineHeight: "normal",
+  pageMargin: 'standard',
+  bodyLineHeight: 'normal',
 };
 
 export const resumeFontSizeStepSchema = z.union([
@@ -50,12 +76,12 @@ export const resumeFontSizeStepSchema = z.union([
   z.literal(2),
 ]);
 
-export const resumePageMarginSchema = z.enum(["compact", "standard"]);
+export const resumePageMarginSchema = z.enum(['compact', 'standard']);
 
 export const resumeBodyLineHeightSchema = z.enum([
-  "tight",
-  "normal",
-  "relaxed",
+  'tight',
+  'normal',
+  'relaxed',
 ]);
 
 export const resumeLayoutOptionsStrictSchema = z.object({
@@ -66,7 +92,7 @@ export const resumeLayoutOptionsStrictSchema = z.object({
 
 function normalizeLayoutOptionsInput(raw: unknown): ResumeLayoutOptions {
   const d = DEFAULT_RESUME_LAYOUT_OPTIONS;
-  if (!raw || typeof raw !== "object") {
+  if (!raw || typeof raw !== 'object') {
     return { ...d };
   }
   const o = raw as Record<string, unknown>;
@@ -74,9 +100,14 @@ function normalizeLayoutOptionsInput(raw: unknown): ResumeLayoutOptions {
   const fs = o.fontSizeStep;
   if (fs === 0 || fs === 1 || fs === 2) {
     fontSizeStep = fs;
-  } else if (typeof fs === "number" && Number.isInteger(fs) && fs >= 0 && fs <= 2) {
+  } else if (
+    typeof fs === 'number' &&
+    Number.isInteger(fs) &&
+    fs >= 0 &&
+    fs <= 2
+  ) {
     fontSizeStep = fs as ResumeFontSizeStep;
-  } else if (typeof fs === "string") {
+  } else if (typeof fs === 'string') {
     const n = Number.parseInt(fs, 10);
     if (n === 0 || n === 1 || n === 2) {
       fontSizeStep = n as ResumeFontSizeStep;
@@ -84,10 +115,12 @@ function normalizeLayoutOptionsInput(raw: unknown): ResumeLayoutOptions {
   }
   const pm = o.pageMargin;
   const pageMargin: ResumePageMargin =
-    pm === "compact" || pm === "standard" ? pm : d.pageMargin;
+    pm === 'compact' || pm === 'standard' ? pm : d.pageMargin;
   const lh = o.bodyLineHeight;
   const bodyLineHeight: ResumeBodyLineHeight =
-    lh === "tight" || lh === "normal" || lh === "relaxed" ? lh : d.bodyLineHeight;
+    lh === 'tight' || lh === 'normal' || lh === 'relaxed'
+      ? lh
+      : d.bodyLineHeight;
   return { fontSizeStep, pageMargin, bodyLineHeight };
 }
 
@@ -102,10 +135,7 @@ export function templateSupportsLayoutDimension(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): boolean {
-  if (
-    (templateId === "professional-two-column" || templateId === "executive-navy") &&
-    dimension === "pageMargin"
-  ) {
+  if (isSidebarTemplateId(templateId) && dimension === 'pageMargin') {
     return false;
   }
   return true;
@@ -115,11 +145,8 @@ export function layoutDimensionDisabledHint(
   templateId: ResumeTemplateId,
   dimension: LayoutOptionDimension,
 ): string | undefined {
-  if (
-    (templateId === "professional-two-column" || templateId === "executive-navy") &&
-    dimension === "pageMargin"
-  ) {
-    return "双栏模板为固定版心，暂不支持切换页边距";
+  if (isSidebarTemplateId(templateId) && dimension === 'pageMargin') {
+    return '双栏模板为固定版心，暂不支持切换页边距';
   }
   return undefined;
 }
@@ -127,34 +154,34 @@ export function layoutDimensionDisabledHint(
 export const resumeIdSchema = z.string().uuid();
 
 export const resumeBasicsFieldKeys = [
-  "fullName",
-  "email",
-  "phone",
-  "location",
-  "headline",
-  "summary",
+  'fullName',
+  'email',
+  'phone',
+  'location',
+  'headline',
+  'summary',
 ] as const;
 
 export type ResumeBasicsFieldKey = (typeof resumeBasicsFieldKeys)[number];
 
 export const DEFAULT_RESUME_BASICS: Record<ResumeBasicsFieldKey, string> = {
-  fullName: "",
-  email: "",
-  phone: "",
-  location: "",
-  headline: "",
-  summary: "",
+  fullName: '',
+  email: '',
+  phone: '',
+  location: '',
+  headline: '',
+  summary: '',
 };
 
 function mergeBasicsInput(raw: unknown): Record<ResumeBasicsFieldKey, string> {
   const patch =
-    raw && typeof raw === "object"
+    raw && typeof raw === 'object'
       ? (raw as Partial<Record<ResumeBasicsFieldKey, unknown>>)
       : {};
   const next = { ...DEFAULT_RESUME_BASICS };
   for (const key of resumeBasicsFieldKeys) {
     const v = patch[key];
-    if (typeof v === "string") {
+    if (typeof v === 'string') {
       next[key] = v;
     }
   }
@@ -176,14 +203,16 @@ export const basicsSensitiveSchema = z
 
 export const DEFAULT_BASICS_SENSITIVE: ResumeBasicsSensitiveMap = {};
 
-function mergeBasicsSensitiveInput(raw: unknown): ResumeBasicsSensitiveMap | undefined {
-  if (!raw || typeof raw !== "object") {
+function mergeBasicsSensitiveInput(
+  raw: unknown,
+): ResumeBasicsSensitiveMap | undefined {
+  if (!raw || typeof raw !== 'object') {
     return undefined;
   }
   const o = raw as Record<string, unknown>;
   const result: Record<string, boolean> = {};
   for (const key of resumeBasicsFieldKeys) {
-    if (typeof o[key] === "boolean") {
+    if (typeof o[key] === 'boolean') {
       result[key] = o[key] as boolean;
     }
   }
@@ -211,42 +240,33 @@ export const resumeBasicsStrictSchema = z.object({
   fullName: z
     .string()
     .trim()
-    .min(1, { message: "请输入姓名" })
-    .max(80, { message: "姓名最多 80 个字符" }),
+    .min(1, { message: '请输入姓名' })
+    .max(80, { message: '姓名最多 80 个字符' }),
   email: z
     .string()
     .trim()
-    .min(1, { message: "请输入邮箱" })
-    .max(254, { message: "邮箱过长" })
-    .pipe(z.email({ message: "邮箱格式不正确" })),
+    .min(1, { message: '请输入邮箱' })
+    .max(254, { message: '邮箱过长' })
+    .pipe(z.email({ message: '邮箱格式不正确' })),
   phone: z
     .string()
     .trim()
-    .min(1, { message: "请输入手机号" })
-    .max(40, { message: "手机号最多 40 个字符" })
+    .min(1, { message: '请输入手机号' })
+    .max(40, { message: '手机号最多 40 个字符' })
     .refine((s) => phonePattern.test(s), {
-      message: "手机号格式不正确",
+      message: '手机号格式不正确',
     }),
-  location: z
-    .string()
-    .trim()
-    .max(120, { message: "工作城市最多 120 个字符" }),
-  headline: z
-    .string()
-    .trim()
-    .max(120, { message: "期望职位最多 120 个字符" }),
-  summary: z
-    .string()
-    .trim()
-    .max(2000, { message: "摘要最多 2000 个字符" }),
+  location: z.string().trim().max(120, { message: '工作城市最多 120 个字符' }),
+  headline: z.string().trim().max(120, { message: '期望职位最多 120 个字符' }),
+  summary: z.string().trim().max(2000, { message: '摘要最多 2000 个字符' }),
 });
 
 export const resumeModuleTypeSchema = z.enum([
-  "experience",
-  "education",
-  "project",
-  "skill",
-  "custom",
+  'experience',
+  'education',
+  'project',
+  'skill',
+  'custom',
 ]);
 
 /** 单条条目下要点数量上限（与下方 `resumeModuleSchema` 中 bullets 数组一致） */
@@ -259,29 +279,36 @@ export const MAX_RESUME_SECTIONS = 200;
 export const MAX_ITEMS_PER_MODULE = 200;
 
 export const resumeModuleSchema = z.object({
-  id: z.string().trim().min(1, { message: "模块 id 不能为空" }),
+  id: z.string().trim().min(1, { message: '模块 id 不能为空' }),
   type: resumeModuleTypeSchema,
   title: z
     .string()
     .trim()
-    .min(1, { message: "模块标题不能为空" })
-    .max(80, { message: "模块标题最多 80 个字符" }),
+    .min(1, { message: '模块标题不能为空' })
+    .max(80, { message: '模块标题最多 80 个字符' }),
   items: z
     .array(
       z.object({
-        id: z.string().trim().min(1, { message: "条目 id 不能为空" }),
-        title: z.string().trim().max(120, { message: "条目标题最多 120 个字符" }).default(""),
+        id: z.string().trim().min(1, { message: '条目 id 不能为空' }),
+        title: z
+          .string()
+          .trim()
+          .max(120, { message: '条目标题最多 120 个字符' })
+          .default(''),
         bullets: z
-          .array(z.string().trim().max(300, { message: "要点最多 300 个字符" }))
+          .array(z.string().trim().max(300, { message: '要点最多 300 个字符' }))
           .max(MAX_BULLETS_PER_ITEM, {
-            message: "要点过多",
+            message: '要点过多',
           })
           .default([]),
         titleSensitive: z.boolean().optional(),
-        bulletSensitive: z.array(z.boolean()).max(MAX_BULLETS_PER_ITEM).optional(),
+        bulletSensitive: z
+          .array(z.boolean())
+          .max(MAX_BULLETS_PER_ITEM)
+          .optional(),
       }),
     )
-    .max(MAX_ITEMS_PER_MODULE, { message: "模块条目过多" })
+    .max(MAX_ITEMS_PER_MODULE, { message: '模块条目过多' })
     .default([]),
   order: z.number().int().nonnegative(),
 });
@@ -291,58 +318,83 @@ function normalizeModulesInput(raw: unknown) {
     return [];
   }
   return raw
-    .filter((m): m is Record<string, unknown> => Boolean(m && typeof m === "object"))
+    .filter((m): m is Record<string, unknown> =>
+      Boolean(m && typeof m === 'object'),
+    )
     .map((m, index) => {
       const type =
-        typeof m.type === "string" &&
-        (["experience", "education", "project", "skill", "custom"] as const).includes(
-          m.type as "experience" | "education" | "project" | "skill" | "custom",
+        typeof m.type === 'string' &&
+        (
+          ['experience', 'education', 'project', 'skill', 'custom'] as const
+        ).includes(
+          m.type as 'experience' | 'education' | 'project' | 'skill' | 'custom',
         )
-          ? (m.type as "experience" | "education" | "project" | "skill" | "custom")
-          : "custom";
-      const idRaw = typeof m.id === "string" ? m.id.trim() : "";
-      const titleRaw = typeof m.title === "string" ? m.title.trim() : "";
+          ? (m.type as
+              | 'experience'
+              | 'education'
+              | 'project'
+              | 'skill'
+              | 'custom')
+          : 'custom';
+      const idRaw = typeof m.id === 'string' ? m.id.trim() : '';
+      const titleRaw = typeof m.title === 'string' ? m.title.trim() : '';
       return {
         id: idRaw || `module-${index + 1}`,
         type,
-        title: titleRaw || "未命名模块",
+        title: titleRaw || '未命名模块',
         items: Array.isArray(m.items)
           ? m.items
               .map((item, itemIndex) => {
-                if (typeof item === "string") {
+                if (typeof item === 'string') {
                   return {
                     id: `item-${index + 1}-${itemIndex + 1}`,
                     title: item,
                     bullets: [],
                   };
                 }
-                if (!item || typeof item !== "object") {
+                if (!item || typeof item !== 'object') {
                   return null;
                 }
                 const itemRecord = item as Record<string, unknown>;
-                const itemIdRaw = typeof itemRecord.id === "string" ? itemRecord.id.trim() : "";
-                const itemTitleRaw = typeof itemRecord.title === "string" ? itemRecord.title.trim() : "";
+                const itemIdRaw =
+                  typeof itemRecord.id === 'string' ? itemRecord.id.trim() : '';
+                const itemTitleRaw =
+                  typeof itemRecord.title === 'string'
+                    ? itemRecord.title.trim()
+                    : '';
                 const sourceBullets = Array.isArray(itemRecord.bullets)
                   ? itemRecord.bullets
                   : [];
                 const bullets: string[] = [];
                 const bulletSourceIndexes: number[] = [];
-                for (let sourceIndex = 0; sourceIndex < sourceBullets.length; sourceIndex += 1) {
+                for (
+                  let sourceIndex = 0;
+                  sourceIndex < sourceBullets.length;
+                  sourceIndex += 1
+                ) {
                   const bullet = sourceBullets[sourceIndex];
-                  if (typeof bullet === "string") {
+                  if (typeof bullet === 'string') {
                     bullets.push(bullet);
                     bulletSourceIndexes.push(sourceIndex);
                   }
                 }
-                const titleSensitive = typeof itemRecord.titleSensitive === "boolean" ? itemRecord.titleSensitive : undefined;
-                const rawBulletSensitive = Array.isArray(itemRecord.bulletSensitive)
+                const titleSensitive =
+                  typeof itemRecord.titleSensitive === 'boolean'
+                    ? itemRecord.titleSensitive
+                    : undefined;
+                const rawBulletSensitive = Array.isArray(
+                  itemRecord.bulletSensitive,
+                )
                   ? itemRecord.bulletSensitive
                   : undefined;
                 const bulletSensitive = rawBulletSensitive
-                  ? bulletSourceIndexes.map((sourceIndex) => rawBulletSensitive[sourceIndex] === true)
+                  ? bulletSourceIndexes.map(
+                      (sourceIndex) => rawBulletSensitive[sourceIndex] === true,
+                    )
                   : undefined;
                 const hasBulletSensitive = Boolean(
-                  bulletSensitive && bulletSensitive.some((flag) => flag === true),
+                  bulletSensitive &&
+                    bulletSensitive.some((flag) => flag === true),
                 );
                 return {
                   id: itemIdRaw || `item-${index + 1}-${itemIndex + 1}`,
@@ -352,7 +404,17 @@ function normalizeModulesInput(raw: unknown) {
                   ...(hasBulletSensitive ? { bulletSensitive } : {}),
                 };
               })
-              .filter((item): item is { id: string; title: string; bullets: string[]; titleSensitive?: boolean; bulletSensitive?: boolean[] } => Boolean(item))
+              .filter(
+                (
+                  item,
+                ): item is {
+                  id: string;
+                  title: string;
+                  bullets: string[];
+                  titleSensitive?: boolean;
+                  bulletSensitive?: boolean[];
+                } => Boolean(item),
+              )
           : [],
         order: index,
       };
@@ -372,7 +434,7 @@ export const resumeDocumentStrictSchema = z
     basics: resumeBasicsStrictSchema,
     sections: z
       .array(resumeModuleSchema)
-      .max(MAX_RESUME_SECTIONS, { message: "模块数量过多" }),
+      .max(MAX_RESUME_SECTIONS, { message: '模块数量过多' }),
     basicsSensitive: basicsSensitiveSchema,
   })
   .strict();
@@ -399,6 +461,7 @@ export const patchResumeBodySchema = z
   .object({
     document: patchResumeDocumentShape.optional(),
     title: patchResumeTitleSchema.optional(),
+    /** 显式传 title 时默认锁定，禁止后续自动覆盖；自动命名时传 false */
     lockTitle: z.boolean().optional(),
   })
   .refine((body) => body.document !== undefined || body.title !== undefined, {
@@ -471,7 +534,9 @@ export const EMPTY_RESUME_DOCUMENT: ResumeDocumentSchemaType =
 
 export type ResumeDTO = z.infer<typeof resumeSchema>;
 export type CreateResumeResponse = z.infer<typeof createResumeResponseSchema>;
-export type DuplicateResumeResponse = z.infer<typeof duplicateResumeResponseSchema>;
+export type DuplicateResumeResponse = z.infer<
+  typeof duplicateResumeResponseSchema
+>;
 export type LoadResumeResponse = z.infer<typeof loadResumeResponseSchema>;
 export type PatchResumeResponse = z.infer<typeof patchResumeResponseSchema>;
 
@@ -494,5 +559,5 @@ export function validateBasicsField(
     return undefined;
   }
   const first = parsed.error.issues[0];
-  return first?.message ?? "格式不正确";
+  return first?.message ?? '格式不正确';
 }

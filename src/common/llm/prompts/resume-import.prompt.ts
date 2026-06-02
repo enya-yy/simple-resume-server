@@ -6,7 +6,7 @@ export function buildResumeImportSystemPrompt(): string {
     '你的任务是将内容映射为 JSON 格式的 ResumeDocument，严格遵循以下规则：',
     '',
     '1. 只提取原文中已有的信息，不要编造、不要补全缺失的公司名/日期/成果。',
-    '2. templateId 固定为 "classic-list"。',
+    '2. templateId 固定为 "amber-elegant"。',
     '3. layoutOptions 固定为：',
     JSON.stringify(DEFAULT_RESUME_LAYOUT_OPTIONS),
     '4. basics 字段：fullName, email, phone, location, headline, summary — 缺失则填空字符串。',

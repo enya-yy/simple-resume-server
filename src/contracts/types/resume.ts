@@ -1,8 +1,7 @@
 /** 简历预览模板 ID（与 `resumeTemplateIdSchema`、持久化 JSON 字段一致） */
 export type ResumeTemplateId =
-  | 'classic-list'
-  | 'professional-two-column'
-  | 'executive-navy';
+  | 'amber-elegant'
+  | 'obsidian-gold';
 
 /** 正文字体档位（可序列化，与导出 Worker 对齐） */
 export type ResumeFontSizeStep = 0 | 1 | 2;

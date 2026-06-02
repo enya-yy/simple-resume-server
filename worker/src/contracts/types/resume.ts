@@ -1,26 +1,25 @@
 /** 简历预览模板 ID（与 `resumeTemplateIdSchema`、持久化 JSON 字段一致） */
 export type ResumeTemplateId =
-  | 'classic-list'
-  | 'professional-two-column'
-  | 'executive-navy'
+  | 'amber-elegant'
+  | 'obsidian-gold';
 
 /** 正文字体档位（可序列化，与导出 Worker 对齐） */
-export type ResumeFontSizeStep = 0 | 1 | 2
+export type ResumeFontSizeStep = 0 | 1 | 2;
 
 /** 预览/导出页边距语义（屏幕预览用容器 padding；PDF 导出可复用） */
-export type ResumePageMargin = 'compact' | 'standard'
+export type ResumePageMargin = 'compact' | 'standard';
 
 /** 正文行距 */
-export type ResumeBodyLineHeight = 'tight' | 'normal' | 'relaxed'
+export type ResumeBodyLineHeight = 'tight' | 'normal' | 'relaxed';
 
 export type ResumeLayoutOptions = {
-  fontSizeStep: ResumeFontSizeStep
-  pageMargin: ResumePageMargin
-  bodyLineHeight: ResumeBodyLineHeight
-}
+  fontSizeStep: ResumeFontSizeStep;
+  pageMargin: ResumePageMargin;
+  bodyLineHeight: ResumeBodyLineHeight;
+};
 
 /** 与 `templateSupportsLayoutDimension` 对齐的维度键 */
-export type LayoutOptionDimension = keyof ResumeLayoutOptions
+export type LayoutOptionDimension = keyof ResumeLayoutOptions;
 
 /** 基础信息字段级敏感标记（key 与 ResumeDocumentBasics 同名字段一一对应） */
 export type ResumeBasicsSensitiveMap = {
@@ -44,7 +43,12 @@ export type ResumeDocumentBasics = {
   summary: string;
 };
 
-export type ResumeModuleType = 'experience' | 'education' | 'project' | 'skill' | 'custom';
+export type ResumeModuleType =
+  | 'experience'
+  | 'education'
+  | 'project'
+  | 'skill'
+  | 'custom';
 
 export type ResumeSectionItem = {
   id: string;
