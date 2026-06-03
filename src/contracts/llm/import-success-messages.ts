@@ -94,14 +94,6 @@ function buildNextStepsText(analysis: ResumeCompletionAnalysis): string {
     lines.push('', '还建议你重点看看：', ...analysis.hints.map((h) => `· ${h}`));
   }
 
-  if (analysis.suggestionPhrases.length > 0) {
-    lines.push(
-      '',
-      '下一步可以试试：',
-      ...analysis.suggestionPhrases.map((p) => `· ${p}`),
-    );
-  }
-
   lines.push(
     '',
     '直接在聊天里告诉我你想先改哪一块，或在右侧预览里点编辑即可。',
@@ -171,6 +163,7 @@ export function buildImportSuccessChatMessages(
         type: 'text',
         role: 'assistant',
         text: buildNextStepsText(analysis),
+        suggestions: analysis.suggestionPhrases,
       },
     },
   ];

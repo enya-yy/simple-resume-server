@@ -153,7 +153,7 @@ export function resolveResumeAgentTurnMeta(input: {
   });
 }
 
-function describeMutationReply(calls: ResumeToolCall[]): string | null {
+function mutationLabels(calls: ResumeToolCall[]): string[] {
   const parts: string[] = [];
   for (const call of calls) {
     switch (call.name) {
@@ -182,13 +182,42 @@ function describeMutationReply(calls: ResumeToolCall[]): string | null {
         break;
     }
   }
-  const unique = [...new Set(parts)];
+  return [...new Set(parts)];
+}
+
+function describeMutationReply(calls: ResumeToolCall[]): string | null {
+  const unique = mutationLabels(calls);
   if (unique.length === 0) return null;
   if (unique.length === 1) {
     if (unique[0] === '一条经历') return '已删除一条经历。';
     return `已更新${unique[0]}。`;
   }
   return `已更新${unique.join('、')}。`;
+}
+
+function buildMutationMarkdown(calls: ResumeToolCall[]): string {
+  const labels = mutationLabels(calls);
+  if (labels.length === 0) {
+    return '## 简历已更新\n\n更改已同步到右侧预览。\n\n**建议下一步：**\n- 检查预览内容\n- 继续补充其他模块';
+  }
+  if (labels.length === 1 && labels[0] === '一条经历') {
+    return '## 已删除一条经历\n\n预览区已同步移除对应内容。\n\n**如需恢复：** 告诉我公司名或时间段，我可以帮你重新添加。';
+  }
+  const headline =
+    labels.length === 1 ? `${labels[0]}已更新` : '简历内容已更新';
+  const detail =
+    labels.length === 1
+      ? `**${labels[0]}** 已写入右侧简历预览。`
+      : `本次更新了 **${labels.join('、')}**。`;
+  return [
+    `## ${headline}`,
+    '',
+    detail,
+    '',
+    '**建议下一步：**',
+    '- 在预览区确认内容是否符合预期',
+    '- 继续补充其他模块，或直接告诉我下一步想改什么',
+  ].join('\n');
 }
 
 export type BuildAgentReplyInput = {
@@ -201,32 +230,68 @@ export type BuildAgentReplyInput = {
   hasPolishJob: boolean;
 };
 
-/** 根据结构化 meta 与本轮工具结果生成面向用户的短回复（模板，非模型长文）。 */
+/** 根据结构化 meta 与本轮工具结果生成面向用户的 Markdown 回复。 */
 export function buildAgentReply(input: BuildAgentReplyInput): string {
   const { meta } = input;
 
   if (meta.outcome === TURN_OUTCOMES.NEED_CLARIFICATION && meta.clarifyHint) {
-    return meta.clarifyHint;
+    return [
+      '## 还需要一点信息',
+      '',
+      meta.clarifyHint,
+      '',
+      '*补充具体细节后，我会立刻继续帮你处理。*',
+    ].join('\n');
   }
 
   if (meta.outcome === TURN_OUTCOMES.NEED_CLARIFICATION) {
-    return '请再说具体一点，例如要改哪一段经历。';
+    return [
+      '## 还需要一点信息',
+      '',
+      '请再说具体一点，例如要改**哪一段经历**、**哪个字段**，或希望达到什么效果。',
+    ].join('\n');
   }
 
   if (meta.outcome === TURN_OUTCOMES.SYSTEM_ACK) {
-    return '已保存。';
+    return [
+      '## 已保存',
+      '',
+      '模块内容已成功写入简历，右侧预览已同步更新。',
+    ].join('\n');
   }
 
   if (meta.outcome === TURN_OUTCOMES.SHOW_FORM || input.hasFormCard) {
-    return '请按下方表单填写。';
+    return [
+      '## 请完善以下内容',
+      '',
+      '填写下方表单后，我会自动同步到简历预览。',
+      '',
+      '**填写提示：**',
+      '- 带 * 的为必填项',
+      '- 保存后可继续补充其他模块',
+    ].join('\n');
   }
 
   if (meta.outcome === TURN_OUTCOMES.PREVIEW || input.hasPreview) {
-    return '已打开简历预览。';
+    return [
+      '## 预览已打开',
+      '',
+      '你可以在右侧查看当前简历排版与内容。',
+      '',
+      '**接下来可以：**',
+      '- 更换模板样式',
+      '- 继续对话修改具体内容',
+    ].join('\n');
   }
 
   if (meta.outcome === TURN_OUTCOMES.POLISH || input.hasPolishJob) {
-    return '已开始润色，完成后会更新到简历。';
+    return [
+      '## 正在润色',
+      '',
+      '已开始优化描述文案，完成后会自动更新到简历。',
+      '',
+      '*润色期间你可以继续编辑其他模块。*',
+    ].join('\n');
   }
 
   if (
@@ -235,18 +300,30 @@ export function buildAgentReply(input: BuildAgentReplyInput): string {
   ) {
     if (input.toolErrors && input.toolErrors.length > 0) {
       const partial = describeMutationReply(input.mutationCalls);
+      const base = buildMutationMarkdown(input.mutationCalls);
       return partial
-        ? `${partial.replace(/。$/, '')}，另有部分未能更新。`
-        : '部分更新未成功，请再说具体一点。';
+        ? base.replace(
+            /\n\n\*\*建议下一步：\*\*[\s\S]*$/,
+            '\n\n> 部分字段未能更新，请检查内容后重试，或告诉我需要调整的地方。',
+          )
+        : '## 部分更新未成功\n\n请检查内容格式后重试，或告诉我具体要改哪一部分。';
     }
     const summary = describeMutationReply(input.mutationCalls);
-    if (summary) return summary;
-    if (input.documentChanged) return '已更新简历。';
+    if (summary) return buildMutationMarkdown(input.mutationCalls);
+    if (input.documentChanged) return buildMutationMarkdown([]);
   }
 
   if (meta.outcome === TURN_OUTCOMES.CHAT_ONLY) {
-    return '可以说说想改简历哪一部分，或直接点下方快捷操作。';
+    return [
+      '## 我可以帮你',
+      '',
+      '告诉我你想改简历的哪一部分，或点选下方快捷操作。',
+    ].join('\n');
   }
 
-  return '好的，还有什么需要帮忙的吗？';
+  return [
+    '## 还有什么需要帮忙？',
+    '',
+    '你可以继续描述修改需求，或点选下方快捷操作。',
+  ].join('\n');
 }

@@ -2,6 +2,8 @@ export type TextMessage = {
   type: 'text'
   role: 'user' | 'assistant' | 'system'
   text: string
+  /** 持久化在消息里的「猜你想做」快捷短语（如导入完成引导） */
+  suggestions?: string[]
 }
 
 export type FormField = {

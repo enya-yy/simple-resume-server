@@ -11,6 +11,7 @@ export const textMessageSchema = z.object({
   type: z.literal('text'),
   role: z.enum(['user', 'assistant', 'system']),
   text: z.string(),
+  suggestions: z.array(z.string()).optional(),
 });
 
 export const formCardMessageSchema = z.object({

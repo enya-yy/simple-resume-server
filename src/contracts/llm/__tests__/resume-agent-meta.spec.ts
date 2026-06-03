@@ -54,7 +54,7 @@ describe('inferResumeAgentTurnMeta', () => {
 });
 
 describe('buildAgentReply', () => {
-  it('uses clarify hint', () => {
+  it('uses clarify hint in markdown', () => {
     expect(
       buildAgentReply({
         meta: {
@@ -69,24 +69,24 @@ describe('buildAgentReply', () => {
         hasPreview: false,
         hasPolishJob: false,
       }),
-    ).toBe('要改哪一段字节经历？');
+    ).toContain('要改哪一段字节经历？');
   });
 
-  it('describes basics mutation', () => {
-    expect(
-      buildAgentReply({
-        meta: {
-          outcome: TURN_OUTCOMES.MUTATION_OK,
-          intent: CHAT_INTENTS.EDIT_BASIC_INFO,
-          confidence: 1,
-        },
-        documentChanged: true,
-        mutationCalls: [{ name: 'update_basics', arguments: { data: {} } }],
-        hasFormCard: false,
-        hasPreview: false,
-        hasPolishJob: false,
-      }),
-    ).toBe('已更新基本信息。');
+  it('describes basics mutation as markdown', () => {
+    const reply = buildAgentReply({
+      meta: {
+        outcome: TURN_OUTCOMES.MUTATION_OK,
+        intent: CHAT_INTENTS.EDIT_BASIC_INFO,
+        confidence: 1,
+      },
+      documentChanged: true,
+      mutationCalls: [{ name: 'update_basics', arguments: { data: {} } }],
+      hasFormCard: false,
+      hasPreview: false,
+      hasPolishJob: false,
+    });
+    expect(reply).toContain('## 基本信息已更新');
+    expect(reply).toContain('**基本信息**');
   });
 });
 

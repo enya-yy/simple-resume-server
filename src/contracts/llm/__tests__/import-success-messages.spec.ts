@@ -46,7 +46,10 @@ describe('buildImportSuccessChatMessages', () => {
 
     const nextStepsText = String(messages[2].contentJson.text);
     expect(nextStepsText).toContain('完成度');
-    expect(nextStepsText).toContain('下一步可以试试');
+    expect(nextStepsText).not.toContain('下一步可以试试');
+    expect(messages[2].contentJson).toMatchObject({
+      suggestions: expect.arrayContaining([expect.any(String)]),
+    });
   });
 
   it('appends basic_info form card when critical basics are missing', () => {
