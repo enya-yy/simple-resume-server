@@ -38,9 +38,19 @@ export class ImportJobsController {
   ) {
     const rawText =
       typeof req.body?.rawText === 'string' ? req.body.rawText : undefined;
+    const sessionId =
+      typeof req.body?.sessionId === 'string' && req.body.sessionId.trim()
+        ? req.body.sessionId.trim()
+        : undefined;
+    const userMessage =
+      typeof req.body?.userMessage === 'string'
+        ? req.body.userMessage
+        : undefined;
+    const fileName =
+      typeof req.body?.fileName === 'string' ? req.body.fileName : undefined;
     return this.importJobsService.createImportJob(
       req.session.userId as string,
-      { file, rawText },
+      { file, rawText, sessionId, userMessage, fileName },
       req.requestId,
     );
   }

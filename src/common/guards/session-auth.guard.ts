@@ -27,6 +27,7 @@ export class SessionAuthGuard implements CanActivate {
         message: '账号已禁用',
       });
     }
+    void this.users.touchLastAccess(userId);
     return true;
   }
 }

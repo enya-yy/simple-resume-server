@@ -24,6 +24,7 @@ const migrationFiles = [
   '003_import_jobs.sql',
   '004_user_credits.sql',
   '005_admin_users.sql',
+  '006_user_last_access.sql',
 ];
 
 for (const file of migrationFiles) {
@@ -139,6 +140,38 @@ for (const file of migrationFiles) {
         db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
         console.log(
           hasRole || hasDisabledAt
+            ? 'SQLite migrations: reconciled'
+            : 'SQLite migrations: applied',
+          name,
+        );
+      } else {
+        console.log('SQLite migrations: skipped (already applied)', name);
+      }
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('Migration failed:', name, e);
+      process.exit(1);
+    }
+    continue;
+  }
+
+  if (name === '006_user_last_access') {
+    const userCols = db.prepare('PRAGMA table_info(users)').all();
+    const hasLastAccessAt = userCols.some((c) => c.name === 'last_access_at');
+
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!hasLastAccessAt) {
+        db.exec('ALTER TABLE users ADD COLUMN last_access_at TEXT');
+      }
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_users_last_access ON users (last_access_at)',
+      );
+      if (!done) {
+        db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
+        console.log(
+          hasLastAccessAt
             ? 'SQLite migrations: reconciled'
             : 'SQLite migrations: applied',
           name,

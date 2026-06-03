@@ -152,6 +152,7 @@ export class ChatSessionsService {
         title: r.title,
         lastMessageSummary: r.last_message_summary,
         updatedAt: r.updated_at.toISOString(),
+        resumeImported: Boolean(r.resume_imported),
       })),
     };
   }
@@ -188,6 +189,7 @@ export class ChatSessionsService {
         title: row.title,
         lastMessageSummary: row.last_message_summary,
         updatedAt: row.updated_at.toISOString(),
+        resumeImported: false,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
@@ -251,12 +253,16 @@ export class ChatSessionsService {
       true,
     );
 
+    const resumeImported =
+      await this.chatSessionsRepository.hasResumeImport(sessionId);
+
     return {
       sessionId: result.session.id,
       resumeId: result.session.resume_id,
       title: result.session.title,
       lastMessageSummary: result.session.last_message_summary,
       updatedAt: result.session.updated_at.toISOString(),
+      resumeImported,
     };
   }
 

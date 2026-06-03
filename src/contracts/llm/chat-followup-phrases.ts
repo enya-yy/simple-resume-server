@@ -31,7 +31,7 @@ export type ChatPersistedFormType =
 
 /**
  * 根据当前简历草稿与刚保存的表单类型，生成「猜你想做」快捷短语（用作聊天建议按钮文案）。
- * 优先补全仍缺失的模块，再给出「再添加一条」与润色类动作。
+ * 优先补全仍缺失的模块，再给出「再添加一条」类动作。
  */
 export function buildResumeProgressFollowupPhrases(
   doc: ResumeDocument,
@@ -64,8 +64,6 @@ export function buildResumeProgressFollowupPhrases(
   if (last === 'basic_info' && !doc.basics.summary?.trim()) {
     add('帮我写一段个人简介');
   }
-
-  add('润色简历里的某一段文字');
 
   return phrases.slice(0, 3);
 }

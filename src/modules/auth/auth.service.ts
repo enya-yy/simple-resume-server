@@ -50,6 +50,7 @@ export class AuthService {
 
     try {
       const user = await this.users.create(parsed.email, hash, trialCredits);
+      await this.users.touchLastAccess(user.id);
       await this.regenerateSession(req);
       req.session.userId = user.id;
       return { userId: user.id };
@@ -102,6 +103,7 @@ export class AuthService {
       });
     }
 
+    await this.users.touchLastAccess(user.id);
     await this.regenerateSession(req);
     req.session.userId = user.id;
     return { userId: user.id };

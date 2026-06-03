@@ -9,6 +9,7 @@ export const adminUserListItemSchema = z.object({
   plan: z.enum([USER_PLANS.TRIAL, USER_PLANS.SUBSCRIBED]),
   creditsBalance: z.number().int(),
   disabledAt: z.string().nullable(),
+  lastAccessAt: z.string().nullable(),
   createdAt: z.string(),
 });
 

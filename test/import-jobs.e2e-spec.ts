@@ -78,6 +78,61 @@ describe('Import jobs (e2e)', () => {
     expect(doc?.basics?.fullName).toBeTruthy();
   });
 
+  it('POST /import-jobs with sessionId imports into existing chat session', async () => {
+    const agent = supertest.agent(app.getHttpServer());
+    await registerAndLogin(agent, `import-session-${Date.now()}@example.com`);
+
+    const csrfCreate = await agent.get('/auth/csrf').expect(200);
+    const resume = await agent
+      .post('/resumes')
+      .set('X-CSRF-Token', csrfCreate.body.data.csrfToken as string)
+      .expect(201);
+    const sessionId = resume.body.data.sessionId as string;
+    const resumeId = resume.body.data.resumeId as string;
+
+    const csrf = await agent.get('/auth/csrf').expect(200);
+    const postJob = await agent
+      .post('/import-jobs')
+      .set('X-CSRF-Token', csrf.body.data.csrfToken as string)
+      .field('sessionId', sessionId)
+      .field(
+        'rawText',
+        [
+          '李四',
+          'li@example.com',
+          '13900139000',
+          '工作经历',
+          '某银行 · 风控工程师 · 2019-2024',
+          '- 负责风控模型',
+        ].join('\n'),
+      )
+      .expect(201);
+
+    expect(postJob.body.data.sessionId).toBe(sessionId);
+    expect(postJob.body.data.resumeId).toBe(resumeId);
+
+    const pool = app.get<PgLikePool>(APP_DB);
+    await runImportJobStep(pool, postJob.body.data.jobId as string);
+
+    const csrfDup = await agent.get('/auth/csrf').expect(200);
+    const duplicate = await agent
+      .post('/import-jobs')
+      .set('X-CSRF-Token', csrfDup.body.data.csrfToken as string)
+      .field('sessionId', sessionId)
+      .field(
+        'rawText',
+        '王五\nwang@example.com\n13800138000\n后端工程师经历若干',
+      )
+      .expect(409);
+    expect(duplicate.body.error.code).toBe('IMPORT_SESSION_ALREADY_USED');
+
+    const sessions = await agent.get('/chat-sessions').expect(200);
+    const row = sessions.body.data.sessions.find(
+      (s: { sessionId: string }) => s.sessionId === sessionId,
+    );
+    expect(row?.resumeImported).toBe(true);
+  });
+
   it('他人 jobId 的 GET 返回 403', async () => {
     const agentA = supertest.agent(app.getHttpServer());
     await registerAndLogin(agentA, `import-owner-${Date.now()}@example.com`);

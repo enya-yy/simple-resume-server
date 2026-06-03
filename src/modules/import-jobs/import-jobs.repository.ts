@@ -78,6 +78,17 @@ export class ImportJobsRepository {
     return { id: out };
   }
 
+  async countActiveOrSucceededForSession(sessionId: string): Promise<number> {
+    const result = await this.pool.query<{ count: number | string }>(
+      `SELECT COUNT(*) AS count
+         FROM import_jobs
+        WHERE session_id = $1
+          AND status IN ('queued', 'running', 'succeeded')`,
+      [sessionId],
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async findById(jobId: string): Promise<ImportJobRow | undefined> {
     const result: QueryResult<ImportJobRow> = await this.pool.query(
       `SELECT id, user_id, resume_id, session_id, status,

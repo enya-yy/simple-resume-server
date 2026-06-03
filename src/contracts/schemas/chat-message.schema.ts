@@ -7,11 +7,18 @@ const formFieldSchema = z.object({
   value: z.string().optional(),
 });
 
+const chatMessageAttachmentSchema = z.object({
+  name: z.string(),
+  mimeType: z.string().optional(),
+  kind: z.string().optional(),
+});
+
 export const textMessageSchema = z.object({
   type: z.literal('text'),
   role: z.enum(['user', 'assistant', 'system']),
   text: z.string(),
   suggestions: z.array(z.string()).optional(),
+  attachments: z.array(chatMessageAttachmentSchema).optional(),
 });
 
 export const formCardMessageSchema = z.object({

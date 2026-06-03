@@ -15,6 +15,7 @@ export const chatSessionSchema = z.object({
   title: z.string(),
   lastMessageSummary: z.string(),
   updatedAt: z.string(),
+  resumeImported: z.boolean(),
 });
 
 export const listChatSessionsResponseSchema = z.object({

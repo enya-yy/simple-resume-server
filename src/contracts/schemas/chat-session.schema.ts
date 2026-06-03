@@ -15,6 +15,8 @@ export const chatSessionSchema = z.object({
   title: z.string(),
   lastMessageSummary: z.string(),
   updatedAt: z.string(),
+  /** 该会话已成功导入或正在导入简历（不可再次上传） */
+  resumeImported: z.boolean(),
 });
 
 export const listChatSessionsResponseSchema = z.object({

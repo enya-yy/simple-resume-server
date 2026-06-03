@@ -10,6 +10,7 @@ export interface ChatSessionRow {
   title: string;
   updated_at: Date;
   last_message_summary: string;
+  resume_imported: boolean | number;
 }
 
 @Injectable()
@@ -18,11 +19,17 @@ export class ChatSessionsRepository {
 
   async listByUser(userId: string): Promise<ChatSessionRow[]> {
     const result = await this.pool.query<ChatSessionRow>(
-      `SELECT id, resume_id, user_id, title, updated_at,
-              '' AS last_message_summary
-       FROM chat_sessions
-       WHERE user_id = $1 AND deleted_at IS NULL
-       ORDER BY updated_at DESC`,
+      `SELECT cs.id, cs.resume_id, cs.user_id, cs.title, cs.updated_at,
+              '' AS last_message_summary,
+              EXISTS (
+                SELECT 1
+                  FROM import_jobs ij
+                 WHERE ij.session_id = cs.id
+                   AND ij.status IN ('queued', 'running', 'succeeded')
+              ) AS resume_imported
+       FROM chat_sessions cs
+       WHERE cs.user_id = $1 AND cs.deleted_at IS NULL
+       ORDER BY cs.updated_at DESC`,
       [userId],
     );
     return result.rows;
@@ -34,7 +41,8 @@ export class ChatSessionsRepository {
   ): Promise<ChatSessionRow | null> {
     const result = await this.pool.query<ChatSessionRow>(
       `SELECT id, resume_id, user_id, title, updated_at,
-              '' AS last_message_summary
+              '' AS last_message_summary,
+              0 AS resume_imported
        FROM chat_sessions
        WHERE resume_id = $1 AND user_id = $2 AND deleted_at IS NULL
        LIMIT 1`,
@@ -55,7 +63,8 @@ export class ChatSessionsRepository {
        FROM resumes r
        WHERE r.id = $4 AND r.user_id = $2
        RETURNING id, resume_id, user_id, title, updated_at,
-                 '' AS last_message_summary`,
+                 '' AS last_message_summary,
+                 0 AS resume_imported`,
       [id, userId, title, resumeId],
     );
     return result.rows[0] ?? null;
@@ -86,7 +95,8 @@ export class ChatSessionsRepository {
        SET title = $1, updated_at = now()
        WHERE id = $2 AND deleted_at IS NULL
        RETURNING id, resume_id, user_id, title, updated_at,
-                 '' AS last_message_summary`,
+                 '' AS last_message_summary,
+                 0 AS resume_imported`,
       [title, sessionId],
     );
     if (!result.rows[0]) {
@@ -98,13 +108,27 @@ export class ChatSessionsRepository {
   async findById(sessionId: string): Promise<ChatSessionRow | null> {
     const result = await this.pool.query<ChatSessionRow>(
       `SELECT id, resume_id, user_id, title, updated_at,
-              '' AS last_message_summary
+              '' AS last_message_summary,
+              0 AS resume_imported
        FROM chat_sessions
        WHERE id = $1 AND deleted_at IS NULL
        LIMIT 1`,
       [sessionId],
     );
     return result.rows[0] ?? null;
+  }
+
+  async hasResumeImport(sessionId: string): Promise<boolean> {
+    const result = await this.pool.query<{ resume_imported: boolean | number }>(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM import_jobs ij
+          WHERE ij.session_id = $1
+            AND ij.status IN ('queued', 'running', 'succeeded')
+       ) AS resume_imported`,
+      [sessionId],
+    );
+    return Boolean(result.rows[0]?.resume_imported);
   }
 
   async softDelete(

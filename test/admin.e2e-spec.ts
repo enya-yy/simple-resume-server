@@ -71,6 +71,8 @@ describe('Admin (e2e)', () => {
 
     const detail = await agent.get(`/admin/users/${targetId}`).expect(200);
     expect(detail.body.data.email).toBe(userEmail.toLowerCase());
+    expect(detail.body.data.createdAt).toMatch(/Z$/);
+    expect(detail.body.data.lastAccessAt).toMatch(/Z$/);
 
     const patched = await agent
       .patch(`/admin/users/${targetId}`)

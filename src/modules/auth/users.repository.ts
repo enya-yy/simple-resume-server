@@ -13,6 +13,7 @@ export interface UserRow {
   plan: UserPlan;
   role: UserRole;
   disabled_at: string | null;
+  last_access_at: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -24,11 +25,12 @@ export interface AdminUserListRow {
   plan: UserPlan;
   credits_balance: number;
   disabled_at: string | null;
+  last_access_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const USER_COLUMNS = `id, email, password_hash, credits_balance, plan, role, disabled_at, created_at, updated_at`;
+const USER_COLUMNS = `id, email, password_hash, credits_balance, plan, role, disabled_at, last_access_at, created_at, updated_at`;
 
 @Injectable()
 export class UsersRepository {
@@ -95,7 +97,7 @@ export class UsersRepository {
 
     values.push(limit, offset);
     const listR = await this.pool.query<AdminUserListRow>(
-      `SELECT id, email, role, plan, credits_balance, disabled_at, created_at, updated_at
+      `SELECT id, email, role, plan, credits_balance, disabled_at, last_access_at, created_at, updated_at
        FROM users ${where}
        ORDER BY created_at DESC
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
@@ -106,11 +108,24 @@ export class UsersRepository {
 
   async findAdminListItem(id: string): Promise<AdminUserListRow | undefined> {
     const r = await this.pool.query<AdminUserListRow>(
-      `SELECT id, email, role, plan, credits_balance, disabled_at, created_at, updated_at
+      `SELECT id, email, role, plan, credits_balance, disabled_at, last_access_at, created_at, updated_at
        FROM users WHERE id = $1 LIMIT 1`,
       [id],
     );
     return r.rows[0];
+  }
+
+  /** Throttled to at most once per 5 minutes per user (stateless). */
+  async touchLastAccess(userId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE users SET last_access_at = datetime('now')
+       WHERE id = $1
+         AND (
+           last_access_at IS NULL
+           OR last_access_at < datetime('now', '-5 minutes')
+         )`,
+      [userId],
+    );
   }
 
   async setPlan(userId: string, plan: UserPlan): Promise<boolean> {

@@ -57,6 +57,8 @@ export const ERROR_CODES = {
   IMPORT_JOB_NOT_FOUND: 'IMPORT_JOB_NOT_FOUND',
   /** 导入请求过于频繁 */
   IMPORT_RATE_LIMITED: 'IMPORT_RATE_LIMITED',
+  /** 该会话已导入或正在导入简历，不可重复上传 */
+  IMPORT_SESSION_ALREADY_USED: 'IMPORT_SESSION_ALREADY_USED',
   /** 试用额度不足，需订阅 */
   CREDITS_EXHAUSTED: 'CREDITS_EXHAUSTED',
 } as const;

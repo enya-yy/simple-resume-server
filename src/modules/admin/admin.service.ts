@@ -15,6 +15,7 @@ import {
 } from '../../contracts/index';
 import { CreditsRepository } from '../credits/credits.repository';
 import { UsersRepository } from '../auth/users.repository';
+import { serializeDbTimestamp } from '../../common/utils/serialize-db-timestamp';
 import { AdminRepository } from './admin.repository';
 
 function parseLimitOffset(query: Record<string, string | string[] | undefined>) {
@@ -44,8 +45,9 @@ export class AdminService {
         role: u.role,
         plan: u.plan,
         creditsBalance: u.credits_balance,
-        disabledAt: u.disabled_at,
-        createdAt: String(u.created_at),
+        disabledAt: serializeDbTimestamp(u.disabled_at),
+        lastAccessAt: serializeDbTimestamp(u.last_access_at),
+        createdAt: serializeDbTimestamp(u.created_at)!,
       })),
       total,
       limit,
@@ -68,16 +70,14 @@ export class AdminService {
       role: user.role,
       plan: user.plan,
       creditsBalance: user.credits_balance,
-      disabledAt: user.disabled_at,
-      createdAt: String(user.created_at),
-      updatedAt: String(user.updated_at),
+      disabledAt: serializeDbTimestamp(user.disabled_at),
+      lastAccessAt: serializeDbTimestamp(user.last_access_at),
+      createdAt: serializeDbTimestamp(user.created_at)!,
+      updatedAt: serializeDbTimestamp(user.updated_at)!,
       stats: {
         resumeCount: stats.resume_count,
         chatSessionCount: stats.chat_session_count,
-        lastActivityAt:
-          stats.last_activity_at != null
-            ? String(stats.last_activity_at)
-            : null,
+        lastActivityAt: serializeDbTimestamp(stats.last_activity_at),
       },
     });
   }
@@ -134,7 +134,7 @@ export class AdminService {
         reason: e.reason,
         refId: e.ref_id,
         balanceAfter: e.balance_after,
-        createdAt: String(e.created_at),
+        createdAt: serializeDbTimestamp(e.created_at)!,
       })),
       total,
       limit,
