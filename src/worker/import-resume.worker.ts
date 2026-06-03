@@ -8,7 +8,11 @@ import { randomUUID } from 'node:crypto';
 import { parseEnv } from '../config/env.schema';
 import { OpenAiChatRequestError } from '../common/llm/openai-chat-completion';
 import { extractResumeText } from './import/extractResumeText';
-import { runImportLlmPipeline } from '../common/llm/import/import-llm';
+import {
+  runImportLlmPipeline,
+  type ImportLlmUsageRecord,
+} from '../common/llm/import/import-llm';
+import { recordLlmTokenUsage } from '../modules/llm-token-usage/record-llm-token-usage';
 import { JobTimeoutError } from './lib/job-timeout';
 
 const MSG_FAILED =
@@ -61,12 +65,13 @@ async function runImportJobInner(
     user_id: string;
     resume_id: string;
     session_id: string;
+    request_id: string | null;
     source_kind: 'file' | 'paste';
     source_mime: string | null;
     source_object_key: string | null;
     source_text: string | null;
   }>(
-    `SELECT user_id, resume_id, session_id, source_kind,
+    `SELECT user_id, resume_id, session_id, request_id, source_kind,
             source_mime, source_object_key, source_text
        FROM import_jobs
       WHERE id = $1 AND status = 'running'`,
@@ -131,13 +136,25 @@ async function runImportJobInner(
   }
 
   let document;
+  const usageRecords: ImportLlmUsageRecord[] = [];
   try {
     document = await runImportLlmPipeline({
       extractedText,
       imageBuffers,
       imageMime,
       signal,
+      usageRecords,
     });
+    for (const rec of usageRecords) {
+      await recordLlmTokenUsage(pool, {
+        userId: row.user_id,
+        source: rec.source,
+        model: rec.model,
+        usage: rec.usage,
+        requestId: row.request_id,
+        refId: importJobId,
+      });
+    }
     console.info('[worker] import LLM succeeded', {
       jobId: importJobId,
       ms: Date.now() - startedAt,

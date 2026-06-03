@@ -2,6 +2,10 @@
  * OpenAI 兼容 Chat Completions（百炼 DashScope、DeepSeek 等；服务端/Worker 专用）。
  */
 import type { ChatAssistLlmBackend } from '../../contracts/index';
+import {
+  normalizeLlmUsage,
+  type LlmUsageSnapshot,
+} from '../../contracts/llm/llm-token-usage';
 
 /** 可带上用户可读说明，供写入 chat_assist_jobs.error_message */
 export class OpenAiChatRequestError extends Error {
@@ -27,6 +31,16 @@ type ChatCompletionJson = {
       content?: unknown;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
+export type OpenAiChatCompletionResult = {
+  content: string;
+  usage: LlmUsageSnapshot;
 };
 
 function extractTextFromMessage(
@@ -150,7 +164,7 @@ export async function completeOpenAiChatCompletion(params: {
   userContent: string;
   signal?: AbortSignal;
   responseFormat?: { type: 'json_object' };
-}): Promise<string> {
+}): Promise<OpenAiChatCompletionResult> {
   const base = params.baseUrl.replace(/\/$/, '');
   const url = `${base}/chat/completions`;
   const body: Record<string, unknown> = {
@@ -204,7 +218,7 @@ export async function completeOpenAiChatCompletion(params: {
   if (!content) {
     throw new OpenAiChatRequestError('llm_empty_choice', emptyChoiceHint, res.status);
   }
-  return content;
+  return { content, usage: normalizeLlmUsage(json.usage) };
 }
 
 export async function completeOpenAiVisionChatCompletion(params: {
@@ -216,7 +230,7 @@ export async function completeOpenAiVisionChatCompletion(params: {
   imageDataUrl: string;
   userText: string;
   signal?: AbortSignal;
-}): Promise<string> {
+}): Promise<OpenAiChatCompletionResult> {
   const base = params.baseUrl.replace(/\/$/, '');
   const url = `${base}/chat/completions`;
   const res = await fetch(url, {
@@ -275,5 +289,5 @@ export async function completeOpenAiVisionChatCompletion(params: {
   if (!content) {
     throw new OpenAiChatRequestError('llm_empty_choice', emptyChoiceHint, res.status);
   }
-  return content;
+  return { content, usage: normalizeLlmUsage(json.usage) };
 }

@@ -10,6 +10,7 @@ import {
   buildResumeAgentSystemPrompt,
   RESUME_AGENT_TOOLS,
 } from '../prompts/resume-agent.prompt';
+import { normalizeLlmUsage } from '../../../contracts/llm/llm-token-usage';
 
 export type OpenAiCompatibleLlmCredentials = {
   apiKey: string;
@@ -63,6 +64,8 @@ export class OpenAiCompatibleLlmProvider implements ILlmGateway {
     );
 
     const turn = parseResumeAgentTurn(response.choices[0]?.message);
+    turn.tokenUsage = normalizeLlmUsage(response.usage);
+    turn.model = this.agentModel;
 
     this.logger.log({
       msg: 'resume_agent_dispatch_success',
@@ -72,6 +75,8 @@ export class OpenAiCompatibleLlmProvider implements ILlmGateway {
       mutationToolCount: turn.mutationCalls.length,
       uiActionCount: turn.uiActions.length,
       responseTextPreview: turn.responseText.slice(0, 80),
+      promptTokens: turn.tokenUsage.promptTokens,
+      completionTokens: turn.tokenUsage.completionTokens,
       latencyMs: Date.now() - start,
     });
 

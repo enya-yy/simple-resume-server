@@ -9,6 +9,8 @@ import {
   ERROR_CODES,
   adjustAdminCreditsBodySchema,
   adminCreditLedgerResponseSchema,
+  adminLlmUsageSummarySchema,
+  adminLlmUsageUsersResponseSchema,
   adminUserDetailSchema,
   adminUsersListResponseSchema,
   patchAdminUserBodySchema,
@@ -17,6 +19,10 @@ import { CreditsRepository } from '../credits/credits.repository';
 import { UsersRepository } from '../auth/users.repository';
 import { serializeDbTimestamp } from '../../common/utils/serialize-db-timestamp';
 import { AdminRepository } from './admin.repository';
+import {
+  LlmTokenUsageService,
+  type LlmUsageTimeRange,
+} from '../llm-token-usage/llm-token-usage.service';
 
 function parseLimitOffset(query: Record<string, string | string[] | undefined>) {
   const rawLimit = Array.isArray(query.limit) ? query.limit[0] : query.limit;
@@ -26,12 +32,34 @@ function parseLimitOffset(query: Record<string, string | string[] | undefined>) 
   return { limit, offset };
 }
 
+const DEFAULT_LLM_USAGE_DAYS = 30;
+
+function parseLlmUsageTimeRange(
+  query: Record<string, string | string[] | undefined>,
+): LlmUsageTimeRange {
+  const rawFrom = Array.isArray(query.from) ? query.from[0] : query.from;
+  const rawTo = Array.isArray(query.to) ? query.to[0] : query.to;
+  if (rawFrom || rawTo) {
+    return {
+      from: rawFrom ?? null,
+      to: rawTo ?? null,
+    };
+  }
+  const to = new Date();
+  const from = new Date(to.getTime() - DEFAULT_LLM_USAGE_DAYS * 24 * 60 * 60 * 1000);
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+  };
+}
+
 @Injectable()
 export class AdminService {
   constructor(
     private readonly users: UsersRepository,
     private readonly credits: CreditsRepository,
     private readonly adminRepo: AdminRepository,
+    private readonly llmTokenUsage: LlmTokenUsageService,
   ) {}
 
   async listUsers(query: Record<string, string | string[] | undefined>) {
@@ -64,6 +92,10 @@ export class AdminService {
       });
     }
     const stats = await this.adminRepo.getUserStats(userId);
+    const llmUsage = await this.llmTokenUsage.getUserStats(userId, {
+      from: null,
+      to: null,
+    });
     return adminUserDetailSchema.parse({
       id: user.id,
       email: user.email,
@@ -78,7 +110,60 @@ export class AdminService {
         resumeCount: stats.resume_count,
         chatSessionCount: stats.chat_session_count,
         lastActivityAt: serializeDbTimestamp(stats.last_activity_at),
+        llmUsage: {
+          promptTokens: llmUsage.promptTokens,
+          completionTokens: llmUsage.completionTokens,
+          totalTokens: llmUsage.totalTokens,
+          callCount: llmUsage.callCount,
+          lastUsedAt: serializeDbTimestamp(llmUsage.lastUsedAt),
+        },
       },
+    });
+  }
+
+  async getLlmUsageSummary(
+    query: Record<string, string | string[] | undefined>,
+  ) {
+    const range = parseLlmUsageTimeRange(query);
+    const summary = await this.llmTokenUsage.getPlatformSummary(range);
+    return adminLlmUsageSummarySchema.parse({
+      promptTokens: summary.promptTokens,
+      completionTokens: summary.completionTokens,
+      totalTokens: summary.totalTokens,
+      callCount: summary.callCount,
+      bySource: summary.bySource,
+      from: range.from,
+      to: range.to,
+    });
+  }
+
+  async listLlmUsageUsers(
+    query: Record<string, string | string[] | undefined>,
+  ) {
+    const q = Array.isArray(query.q) ? query.q[0] : query.q;
+    const { limit, offset } = parseLimitOffset(query);
+    const range = parseLlmUsageTimeRange(query);
+    const { items, total } = await this.llmTokenUsage.listUsersUsage({
+      q,
+      limit,
+      offset,
+      range,
+    });
+    return adminLlmUsageUsersResponseSchema.parse({
+      items: items.map((row) => ({
+        userId: row.userId,
+        email: row.email,
+        promptTokens: row.promptTokens,
+        completionTokens: row.completionTokens,
+        totalTokens: row.totalTokens,
+        callCount: row.callCount,
+        lastUsedAt: serializeDbTimestamp(row.lastUsedAt),
+      })),
+      total,
+      limit,
+      offset,
+      from: range.from,
+      to: range.to,
     });
   }
 

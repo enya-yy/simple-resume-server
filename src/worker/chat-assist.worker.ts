@@ -11,6 +11,8 @@ import {
   OpenAiChatRequestError,
   completeOpenAiChatCompletion,
 } from './bailian-dashscope-chat.js';
+import { LLM_USAGE_SOURCES } from '../contracts/llm/llm-token-usage.js';
+import { recordLlmTokenUsage } from '../modules/llm-token-usage/record-llm-token-usage.js';
 
 const MSG_PROCESSING =
   '对话辅助处理失败，请稍后重试。若问题持续，请联系支持并附上 requestId。';
@@ -104,11 +106,12 @@ async function runChatAssistJobInner(
   }
 
   const jobRow = await pool.query<{
+    user_id: string;
     assist_kind: string;
     target_hint: string | null;
     context_hint: string | null;
   }>(
-    `SELECT assist_kind, target_hint, context_hint
+    `SELECT user_id, assist_kind, target_hint, context_hint
        FROM chat_assist_jobs
       WHERE id = $1 AND status = 'running'`,
     [chatAssistJobId],
@@ -147,13 +150,21 @@ async function runChatAssistJobInner(
     if (!cfg) {
       suggestion = placeholderSuggestion(assistKind);
     } else {
-      suggestion = await completeOpenAiChatCompletion({
+      const result = await completeOpenAiChatCompletion({
         backend: cfg.backend,
         apiKey: cfg.apiKey,
         model: cfg.model,
         baseUrl: cfg.baseUrl,
         systemPrompt: buildSystemPrompt(assistKind),
         userContent,
+      });
+      suggestion = result.content;
+      await recordLlmTokenUsage(pool, {
+        userId: row.user_id,
+        source: LLM_USAGE_SOURCES.CHAT_ASSIST,
+        model: cfg.model,
+        usage: result.usage,
+        refId: chatAssistJobId,
       });
     }
 

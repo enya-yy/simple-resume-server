@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { USER_PLANS } from '../constants/credit-actions';
 import { USER_ROLES } from '../constants/user-roles';
+import { adminUserLlmUsageStatsSchema } from './admin-llm-usage.schema';
 
 export const adminUserListItemSchema = z.object({
   id: z.string().uuid(),
@@ -24,6 +25,7 @@ export const adminUserStatsSchema = z.object({
   resumeCount: z.number().int().nonnegative(),
   chatSessionCount: z.number().int().nonnegative(),
   lastActivityAt: z.string().nullable(),
+  llmUsage: adminUserLlmUsageStatsSchema,
 });
 
 export const adminUserDetailSchema = adminUserListItemSchema.extend({

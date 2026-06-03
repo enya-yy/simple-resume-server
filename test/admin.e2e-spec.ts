@@ -73,6 +73,19 @@ describe('Admin (e2e)', () => {
     expect(detail.body.data.email).toBe(userEmail.toLowerCase());
     expect(detail.body.data.createdAt).toMatch(/Z$/);
     expect(detail.body.data.lastAccessAt).toMatch(/Z$/);
+    expect(detail.body.data.stats.llmUsage).toMatchObject({
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      callCount: 0,
+      lastUsedAt: null,
+    });
+
+    const usageSummary = await agent.get('/admin/llm-usage/summary').expect(200);
+    expect(usageSummary.body.data.totalTokens).toBe(0);
+
+    const usageUsers = await agent.get('/admin/llm-usage/users').expect(200);
+    expect(usageUsers.body.data.items).toEqual([]);
 
     const patched = await agent
       .patch(`/admin/users/${targetId}`)

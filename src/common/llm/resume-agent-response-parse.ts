@@ -9,6 +9,7 @@ import {
   RESUME_UI_TOOL_NAMES,
 } from './prompts/resume-agent.prompt';
 import type { ResumeToolCall, ResumeToolName } from '../../contracts/llm/resume-agent-tools';
+import type { LlmUsageSnapshot } from '../../contracts/llm/llm-token-usage';
 
 export type { ResumeAgentTurnMeta } from '../../contracts/llm/resume-agent-meta';
 
@@ -28,6 +29,8 @@ export type ResumeAgentTurn = {
   meta: ResumeAgentTurnMeta | null;
   mutationCalls: ResumeToolCall[];
   uiActions: ResumeUiAction[];
+  tokenUsage?: LlmUsageSnapshot;
+  model?: string;
 };
 
 const MUTATION_SET = new Set<string>(RESUME_MUTATION_TOOL_NAMES);

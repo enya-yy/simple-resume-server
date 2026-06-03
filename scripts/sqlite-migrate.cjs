@@ -25,6 +25,7 @@ const migrationFiles = [
   '004_user_credits.sql',
   '005_admin_users.sql',
   '006_user_last_access.sql',
+  '007_llm_token_usage.sql',
 ];
 
 for (const file of migrationFiles) {

@@ -47,4 +47,18 @@ export class AdminController {
   adjustCredits(@Param('id') id: string, @Body() body: unknown) {
     return this.admin.adjustCredits(id, body);
   }
+
+  @Get('llm-usage/summary')
+  getLlmUsageSummary(
+    @Query() query: Record<string, string | string[] | undefined>,
+  ) {
+    return this.admin.getLlmUsageSummary(query);
+  }
+
+  @Get('llm-usage/users')
+  listLlmUsageUsers(
+    @Query() query: Record<string, string | string[] | undefined>,
+  ) {
+    return this.admin.listLlmUsageUsers(query);
+  }
 }

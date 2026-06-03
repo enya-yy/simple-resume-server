@@ -18,6 +18,8 @@ export * from './schemas/auth.schema';
 export * from './constants/credit-actions';
 export * from './constants/user-roles';
 export * from './schemas/admin.schema';
+export * from './schemas/admin-llm-usage.schema';
+export * from './llm/llm-token-usage';
 export * from './schemas/user-credits.schema';
 export * from './schemas/resume.schema';
 export * from './resume-title';

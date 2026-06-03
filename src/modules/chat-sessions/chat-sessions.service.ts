@@ -41,6 +41,8 @@ import { ResumesRepository } from '../resumes/resumes.repository';
 import { ChatMessagesRepository } from './chat-messages.repository';
 import { ChatSessionsRepository } from './chat-sessions.repository';
 import { ResumeAgentService } from '../resume-agent/resume-agent.service';
+import { LlmTokenUsageService } from '../llm-token-usage/llm-token-usage.service';
+import { LLM_USAGE_SOURCES } from '../../contracts/llm/llm-token-usage';
 
 const BASIC_INFO_FIELDS: FormField[] = [
   { name: 'fullName', label: '姓名', required: true },
@@ -129,6 +131,7 @@ export class ChatSessionsService {
     private readonly resumesRepository: ResumesRepository,
     private readonly llmGateway: LlmGatewayService,
     private readonly creditsService: CreditsService,
+    private readonly llmTokenUsage: LlmTokenUsageService,
   ) {
     const env = parseEnv(process.env);
     this.llmDebug = env.LLM_DEBUG;
@@ -539,6 +542,17 @@ export class ChatSessionsService {
 
       const { turn, document, documentChanged, toolResults } = agentRun;
 
+      if (turn.tokenUsage) {
+        this.llmTokenUsage.record({
+          userId,
+          source: LLM_USAGE_SOURCES.CHAT_AGENT,
+          model: turn.model,
+          usage: turn.tokenUsage,
+          requestId,
+          refId: sessionId,
+        });
+      }
+
       const resolvedMeta = resolveResumeAgentTurnMeta({
         meta: turn.meta,
         mutationCalls: turn.mutationCalls,
@@ -728,7 +742,18 @@ export class ChatSessionsService {
         intent: resolvedMeta.intent,
       });
 
-      if (!writeEvent('done', { messageId: assistantRow.id, usage: {} })) {
+      if (
+        !writeEvent('done', {
+          messageId: assistantRow.id,
+          usage: turn.tokenUsage
+            ? {
+                promptTokens: turn.tokenUsage.promptTokens,
+                completionTokens: turn.tokenUsage.completionTokens,
+                totalTokens: turn.tokenUsage.totalTokens,
+              }
+            : {},
+        })
+      ) {
         return;
       }
       res.end();

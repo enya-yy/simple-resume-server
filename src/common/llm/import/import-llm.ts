@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ResumeDocument } from '../../../contracts/index';
 import {
+  LLM_USAGE_SOURCES,
+  type LlmUsageSnapshot,
+} from '../../../contracts/llm/llm-token-usage';
+import {
   resolveChatAssistLlmEnv,
   type ChatAssistLlmBackend,
   type ChatAssistLlmResolved,
@@ -99,17 +103,24 @@ function mimeToDataUrl(mime: string, buffer: Buffer): string {
   return `data:${mime};base64,${buffer.toString('base64')}`;
 }
 
+export type ImportLlmUsageRecord = {
+  source: typeof LLM_USAGE_SOURCES.IMPORT_OCR | typeof LLM_USAGE_SOURCES.IMPORT_PARSE;
+  model: string;
+  usage: LlmUsageSnapshot;
+};
+
 export async function ocrImagesToText(params: {
   vision: ImportVisionCreds;
   imageBuffers: Buffer[];
   mime: string;
   signal?: AbortSignal;
+  usageRecords?: ImportLlmUsageRecord[];
 }): Promise<string> {
   if (params.imageBuffers.length === 0) return '';
 
   const parts: string[] = [];
   for (let i = 0; i < params.imageBuffers.length; i++) {
-    const pageText = await completeOpenAiVisionChatCompletion({
+    const result = await completeOpenAiVisionChatCompletion({
       backend: params.vision.backend,
       apiKey: params.vision.apiKey,
       model: params.vision.model,
@@ -122,7 +133,12 @@ export async function ocrImagesToText(params: {
           : '请提取这份简历图片中的全部文字。',
       signal: params.signal,
     });
-    parts.push(pageText);
+    params.usageRecords?.push({
+      source: LLM_USAGE_SOURCES.IMPORT_OCR,
+      model: params.vision.model,
+      usage: result.usage,
+    });
+    parts.push(result.content);
   }
   return parts.join('\n\n').trim();
 }
@@ -131,8 +147,9 @@ export async function parseResumeFromText(params: {
   llm: ImportLlmResolved;
   extractedText: string;
   signal?: AbortSignal;
+  usageRecords?: ImportLlmUsageRecord[];
 }): Promise<ResumeDocument> {
-  const rawJson = await completeOpenAiChatCompletion({
+  const result = await completeOpenAiChatCompletion({
     backend: params.llm.backend,
     apiKey: params.llm.apiKey,
     model: params.llm.model,
@@ -142,10 +159,15 @@ export async function parseResumeFromText(params: {
     signal: params.signal,
     responseFormat: { type: 'json_object' },
   });
+  params.usageRecords?.push({
+    source: LLM_USAGE_SOURCES.IMPORT_PARSE,
+    model: params.llm.model,
+    usage: result.usage,
+  });
 
   let parsed: unknown;
   try {
-    parsed = parseJsonFromLlmResponse(rawJson);
+    parsed = parseJsonFromLlmResponse(result.content);
   } catch {
     throw new OpenAiChatRequestError(
       'import_invalid_json',
@@ -162,6 +184,7 @@ export async function runImportLlmPipeline(params: {
   imageBuffers: Buffer[];
   imageMime: string;
   signal?: AbortSignal;
+  usageRecords?: ImportLlmUsageRecord[];
 }): Promise<ResumeDocument> {
   const llm = resolveImportLlmEnv(process.env);
   if (!llm) {
@@ -186,6 +209,7 @@ export async function runImportLlmPipeline(params: {
       imageBuffers: params.imageBuffers,
       mime: params.imageMime,
       signal: params.signal,
+      usageRecords: params.usageRecords,
     });
   }
 
@@ -197,5 +221,10 @@ export async function runImportLlmPipeline(params: {
     );
   }
 
-  return parseResumeFromText({ llm, extractedText: text, signal: params.signal });
+  return parseResumeFromText({
+    llm,
+    extractedText: text,
+    signal: params.signal,
+    usageRecords: params.usageRecords,
+  });
 }

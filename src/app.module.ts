@@ -17,10 +17,12 @@ import { LlmGatewayModule } from './common/llm/llm-gateway.module';
 import { CreditsModule } from './modules/credits/credits.module';
 import { GuardsModule } from './common/guards/guards.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { LlmTokenUsageModule } from './modules/llm-token-usage/llm-token-usage.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    LlmTokenUsageModule,
     GuardsModule,
     LlmGatewayModule,
     CreditsModule,
