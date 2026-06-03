@@ -118,6 +118,20 @@ jobs:
           export SESSION_COOKIE_SECURE=false
           export TRUST_PROXY=true
 
+          ENV_FILE="$TEST_SERVER_DIR/.env"
+          touch "$ENV_FILE"
+          upsert_env() {
+            local key="$1"
+            local val="$2"
+            if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+              sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+            else
+              echo "${key}=${val}" >> "$ENV_FILE"
+            fi
+          }
+          upsert_env SESSION_COOKIE_SECURE false
+          upsert_env TRUST_PROXY true
+
           pnpm_cmd() {
             corepack pnpm@10.33.0 "$@"
           }

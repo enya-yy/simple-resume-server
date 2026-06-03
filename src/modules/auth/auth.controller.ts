@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { CsrfGuard } from '../../common/guards/csrf.guard';
@@ -14,6 +22,9 @@ export class AuthController {
   ) {}
 
   @Get('csrf')
+  @Header('Cache-Control', 'no-store, private')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Cookie')
   getCsrf(@Req() req: Request) {
     if (!req.session.csrfSecret) {
       req.session.csrfSecret = this.csrf.createSecret();
