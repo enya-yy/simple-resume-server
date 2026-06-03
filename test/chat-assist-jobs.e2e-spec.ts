@@ -71,6 +71,35 @@ describe('Chat assist jobs (e2e)', () => {
     expect(poll.body.requestId).toBeTruthy();
   });
 
+  it('POST polish 任务接受 sourceText 且 GET 返回 assistKind=polish', async () => {
+    const agent = supertest.agent(app.getHttpServer());
+    await registerAndLogin(agent, `ca-polish-${Date.now()}@example.com`);
+
+    const csrf1 = await agent.get('/auth/csrf').expect(200);
+    const createRes = await agent
+      .post('/resumes')
+      .set('X-CSRF-Token', csrf1.body.data.csrfToken as string)
+      .expect(201);
+    const resumeId = createRes.body.data.resumeId as string;
+
+    const csrf3 = await agent.get('/auth/csrf').expect(200);
+    const postJob = await agent
+      .post('/chat-assist-jobs')
+      .set('X-CSRF-Token', csrf3.body.data.csrfToken as string)
+      .send({
+        resumeId,
+        assistKind: 'polish',
+        targetHint: 'summary',
+        sourceText: '负责多个产品线的规划与落地。',
+      })
+      .expect(201);
+
+    const jobId = postJob.body.data.jobId as string;
+    const poll = await agent.get(`/chat-assist-jobs/${jobId}`).expect(200);
+    expect(poll.body.data.assistKind).toBe('polish');
+    expect(poll.body.data.targetHint).toBe('summary');
+  });
+
   it('GET 不存在的 jobId 返回 CHAT_ASSIST_JOB_NOT_FOUND', async () => {
     const agent = supertest.agent(app.getHttpServer());
     await registerAndLogin(agent, `ca-nf-${Date.now()}@example.com`);

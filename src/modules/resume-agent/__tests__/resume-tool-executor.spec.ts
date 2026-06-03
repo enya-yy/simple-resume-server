@@ -37,6 +37,29 @@ describe('ResumeToolExecutorService', () => {
     expect(sections[0]?.items[0]?.bullets[0]).toContain('Vue');
   });
 
+  it('add_section_item creates education module with school, degree and dates', () => {
+    const result = executor.execute(emptyDoc, {
+      name: 'add_section_item',
+      arguments: {
+        moduleType: 'education',
+        item: {
+          title: '山东大学',
+          bullets: ['计算机 硕士', '2014 — 2016'],
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    const sections = result.document?.sections ?? [];
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.type).toBe('education');
+    expect(sections[0]?.title).toBe('教育背景');
+    expect(sections[0]?.items[0]?.title).toBe('山东大学');
+    expect(sections[0]?.items[0]?.bullets).toEqual([
+      '计算机 硕士',
+      '2014 — 2016',
+    ]);
+  });
+
   it('patch_item_bullets appends by itemId', () => {
     const added = executor.execute(emptyDoc, {
       name: 'add_section_item',

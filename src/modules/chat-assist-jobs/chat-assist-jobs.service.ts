@@ -54,13 +54,16 @@ export class ChatAssistJobsService {
 
     await this.creditsService.spend(userId, CREDIT_ACTIONS.CHAT_ASSIST);
 
+    const contextHint =
+      parsed.assistKind === 'polish' ? parsed.sourceText : parsed.contextHint;
+
     const { id } = await this.chatAssistJobsRepository.insertQueued({
       userId,
       resumeId: resume.id,
       status: 'queued',
       assistKind: parsed.assistKind,
       targetHint: parsed.targetHint,
-      contextHint: parsed.contextHint,
+      contextHint,
     });
 
     return createChatAssistJobResponseSchema.parse({ jobId: id });
@@ -83,6 +86,8 @@ export class ChatAssistJobsService {
     const payload = {
       jobId: row.id,
       status: row.status,
+      assistKind: row.assist_kind,
+      targetHint: row.target_hint ?? undefined,
       suggestionText: row.suggestion_text ?? undefined,
       errorCode: row.error_code ?? undefined,
       errorMessage: row.error_message ?? undefined,

@@ -12,6 +12,14 @@ describe('buildResumeAgentSystemPrompt', () => {
     expect(prompt).toContain('用户已给出技能名时视为信息足够');
   });
 
+  it('includes education guidance and few-shot for adding degree from natural language', () => {
+    const prompt = buildResumeAgentSystemPrompt();
+    expect(prompt).toContain('教育经历 / 学历');
+    expect(prompt).toContain('2014-2016年在山东大学读计算机的研究生');
+    expect(prompt).toContain('moduleType: education');
+    expect(prompt).toContain('用户已给出学校/专业/就读时间时视为信息足够');
+  });
+
   it('injects resume context when provided', () => {
     const prompt = buildResumeAgentSystemPrompt('## 模块与条目\n- skill item');
     expect(prompt).toContain('## 模块与条目');
@@ -31,11 +39,15 @@ describe('RESUME_AGENT_TOOLS add_section_item', () => {
     };
   };
 
-  it('describes skill entries without requiring long copy', () => {
+  it('describes section item formats for education and skill', () => {
     expect(fnTool?.description).toContain('skill');
-    expect(fnTool?.description).toContain('技术栈');
+    expect(fnTool?.description).toContain('education');
+    expect(fnTool?.description).toContain('就读时间');
     expect(itemSchema?.properties?.item?.properties?.title?.description).toContain(
       '技术栈',
+    );
+    expect(itemSchema?.properties?.item?.properties?.title?.description).toContain(
+      '学校名',
     );
   });
 });

@@ -1,9 +1,12 @@
 import {
   CHAT_ASSIST_JOB_ERROR_CODES,
   CHAT_ASSIST_JOB_TIMEOUT_MS_DEFAULT,
+  CHAT_ASSIST_POLISH_FIELD,
   resolveChatAssistLlmEnv,
   type ChatAssistKind,
+  type ChatAssistPolishField,
 } from '../contracts/index';
+import { ruleBasedPolish } from './polish.worker.js';
 import type { PgLikePool } from '@simple-resume/sqlite-pg';
 
 import { JobTimeoutError, withTimeout } from './lib/job-timeout.js';
@@ -30,7 +33,21 @@ function getChatAssistJobTimeoutMs(): number {
   return CHAT_ASSIST_JOB_TIMEOUT_MS_DEFAULT;
 }
 
+const POLISH_FIELD_LABEL: Record<ChatAssistPolishField, string> = {
+  summary: '个人简介',
+  description: '工作/项目描述',
+};
+
 function buildSystemPrompt(assistKind: ChatAssistKind): string {
+  if (assistKind === 'polish') {
+    return [
+      '你是中文简历润色助手。用户会提供字段类型与待润色原文。',
+      '在保留事实、数据与专有名词的前提下，优化措辞、结构与专业度；',
+      '不要编造新事实；不要添加原文没有的公司、项目或成果。',
+      '仅输出润色后的正文，不要加标题、引号或解释说明。',
+      '若原文含 Markdown 列表或分段，可保留并适度优化格式。',
+    ].join('');
+  }
   if (assistKind === 'basics') {
     return [
       '你是中文简历写作助手。根据用户给出的字段定位与可选短上下文，',
@@ -50,6 +67,16 @@ function buildUserPayload(params: {
   targetHint: string | null;
   contextHint: string | null;
 }): string {
+  if (params.assistKind === 'polish') {
+    const fieldKey = params.targetHint as ChatAssistPolishField | null;
+    const fieldLabel =
+      fieldKey && CHAT_ASSIST_POLISH_FIELD.includes(fieldKey)
+        ? POLISH_FIELD_LABEL[fieldKey]
+        : '简历正文';
+    const parts = [`字段类型：${fieldLabel}`, '待润色原文：', params.contextHint ?? ''];
+    parts.push('请直接输出润色后的正文。');
+    return parts.join('\n');
+  }
   const parts: string[] = [`辅助类型：${params.assistKind}`];
   if (params.targetHint) {
     parts.push(`定位/字段：${params.targetHint}`);
@@ -61,7 +88,13 @@ function buildUserPayload(params: {
   return parts.join('\n');
 }
 
-function placeholderSuggestion(assistKind: ChatAssistKind): string {
+function placeholderSuggestion(
+  assistKind: ChatAssistKind,
+  sourceText: string | null,
+): string {
+  if (assistKind === 'polish' && sourceText) {
+    return ruleBasedPolish(sourceText);
+  }
   return [
     '【离线占位】未配置可用的对话模型密钥。请设置 DEEPSEEK_API_KEY 并指定 LLM_PROVIDER=deepseek',
     '（推荐，默认模型 deepseek-v4-flash），或沿用百炼：DASHSCOPE_API_KEY 与 LLM_PROVIDER=dashscope。',
@@ -128,7 +161,11 @@ async function runChatAssistJobInner(
   }
 
   const assistKind = row.assist_kind as ChatAssistKind;
-  if (assistKind !== 'basics' && assistKind !== 'experience') {
+  if (
+    assistKind !== 'basics' &&
+    assistKind !== 'experience' &&
+    assistKind !== 'polish'
+  ) {
     await markChatAssistFailed(
       pool,
       chatAssistJobId,
@@ -136,6 +173,29 @@ async function runChatAssistJobInner(
       MSG_PROCESSING,
     );
     return;
+  }
+
+  if (assistKind === 'polish') {
+    const fieldKey = row.target_hint as ChatAssistPolishField | null;
+    if (!fieldKey || !CHAT_ASSIST_POLISH_FIELD.includes(fieldKey)) {
+      await markChatAssistFailed(
+        pool,
+        chatAssistJobId,
+        CHAT_ASSIST_JOB_ERROR_CODES.CHAT_ASSIST_PROCESSING_FAILED,
+        MSG_PROCESSING,
+      );
+      return;
+    }
+    const source = row.context_hint?.trim() ?? '';
+    if (!source) {
+      await markChatAssistFailed(
+        pool,
+        chatAssistJobId,
+        CHAT_ASSIST_JOB_ERROR_CODES.CHAT_ASSIST_PROCESSING_FAILED,
+        '润色内容为空，请先填写正文。',
+      );
+      return;
+    }
   }
 
   const userContent = buildUserPayload({
@@ -148,7 +208,7 @@ async function runChatAssistJobInner(
   try {
     const cfg = resolveChatAssistLlmEnv(process.env);
     if (!cfg) {
-      suggestion = placeholderSuggestion(assistKind);
+      suggestion = placeholderSuggestion(assistKind, row.context_hint);
     } else {
       const result = await completeOpenAiChatCompletion({
         backend: cfg.backend,
