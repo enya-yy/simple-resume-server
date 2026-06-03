@@ -7,7 +7,7 @@ import {
   type ResumeModule,
   type ResumeSectionItem,
   type ResumeTemplateId,
-} from '../../contracts/index';
+} from '../contracts/index.js';
 
 const PDF_EXPORT_STYLE = `
 @page { size: A4; margin: 10mm; }

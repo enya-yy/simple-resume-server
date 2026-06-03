@@ -8,7 +8,7 @@ import type {
   ResumeLayoutOptions,
   ResumePageMargin,
   ResumeTemplateId,
-} from '../types/resume';
+} from '../types/resume.js';
 
 export const RESUME_TEMPLATE_IDS = [
   'amber-elegant',

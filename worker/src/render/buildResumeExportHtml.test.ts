@@ -1,5 +1,5 @@
-import { buildResumeExportHtml } from "./buildResumeExportHtml";
-import type { ResumeDocument } from "../../contracts/index";
+import { buildResumeExportHtml } from "./buildResumeExportHtml.js";
+import type { ResumeDocument } from "../contracts/index.js";
 
 describe("buildResumeExportHtml", () => {
   it("renders amber-elegant layout", () => {
