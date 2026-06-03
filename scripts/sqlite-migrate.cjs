@@ -116,6 +116,45 @@ for (const file of migrationFiles) {
     continue;
   }
 
+  if (name === '005_admin_users') {
+    const userCols = db.prepare('PRAGMA table_info(users)').all();
+    const hasRole = userCols.some((c) => c.name === 'role');
+    const hasDisabledAt = userCols.some((c) => c.name === 'disabled_at');
+
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!hasRole) {
+        db.exec(
+          "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+        );
+      }
+      if (!hasDisabledAt) {
+        db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+        CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
+      `);
+      if (!done) {
+        db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)').run(name);
+        console.log(
+          hasRole || hasDisabledAt
+            ? 'SQLite migrations: reconciled'
+            : 'SQLite migrations: applied',
+          name,
+        );
+      } else {
+        console.log('SQLite migrations: skipped (already applied)', name);
+      }
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('Migration failed:', name, e);
+      process.exit(1);
+    }
+    continue;
+  }
+
   db.exec('BEGIN IMMEDIATE');
   try {
     db.exec(sql);
