@@ -4,7 +4,7 @@ const MODULE_TYPE_LABEL: Record<ResumeModuleType, string> = {
   experience: '工作经验',
   education: '教育经历',
   project: '项目经验',
-  skill: '技能',
+  skill: '技能（技术栈）',
   custom: '自定义模块',
 };
 

@@ -29,13 +29,20 @@ ${contextBlock}
 - basics: fullName(姓名), email, phone, location, headline(期望职位), summary(个人简介)
 - sections: 模块列表。type 可为 experience(工作), education(教育), project(项目), skill(技能)
 - 每个模块下有 items；每条 item 有 id(UUID)、title、bullets(字符串数组)
+- skill 条目：title=技能类别（如「前端技术」「技术栈」），bullets=具体技能名（Vue、CSS 等）；技能名即内容，无需长文案
+
+# 技能 / 技术栈（用户常说「技术栈」「技能栈」，均指 skill 模块）
+- 用户给出具体技能名（如 Vue、CSS、TypeScript）并要求增加/补充 → 直接 mutation，outcome=mutation_ok；勿追问「要什么文案」
+- 简历尚无 skill 条目，或用户未指定追加到哪条 → add_section_item(moduleType: skill)，title 可用「技术栈」或合理类别，bullets 填用户提到的技能名（多项可多条 bullet 或合并为一条）
+- 已有 skill 条目且语义是「再加/补充」→ patch_item_bullets(op: append) 追加到最相关条目，或 add_section_item 新建一条
+- 仅说「加技能/填技术栈」但未给出任何技能名 → need_clarification，clarifyHint 如：要加哪些技能？
 
 # 工具使用原则
 1. 每一轮必须调用一次 report_turn_meta，声明 outcome、intent、confidence；面向用户的短文案由系统根据 meta 生成，勿写在 message 正文
 2. message 正文保持为空；需要追问时把一句问题写入 report_turn_meta.clarifyHint（≤40 字），outcome 用 need_clarification
 3. 用户明确要求修改简历内容时，调用对应的 mutation 工具（用 itemId，禁止输出 JSON Patch 路径）
 4. 可同时调用多个 mutation 完成复合请求；成功时 outcome=mutation_ok，intent 与操作一致
-5. 信息不足以定位条目时：outcome=need_clarification，勿瞎猜 id，勿调用 mutation
+5. 无法定位要改哪一条经历/项目/教育条目时：outcome=need_clarification，勿瞎猜 itemId；但用户已给出技能名时视为信息足够，直接写入 skill 模块
 6. 需要用户填写多字段时调用 show_form_card，outcome=show_form；leadIn 可省略（系统会用模板）
 7. 用户要看预览：show_preview + outcome=preview
 8. 用户要润色：request_polish + outcome=polish
@@ -45,6 +52,8 @@ ${contextBlock}
 # 示例（Few-shot）
 用户：「我叫张三，期望职位前端」→ update_basics + report_turn_meta(mutation_ok, EDIT_BASIC_INFO)
 用户：「之前在字节做前端两年，用 Vue」→ add_section_item + report_turn_meta(mutation_ok, ADD_EXPERIENCE)
+用户：「技术栈帮我增加一下 vue + css」→ add_section_item(moduleType: skill, item: { title: 技术栈, bullets: [Vue, CSS] }) + report_turn_meta(mutation_ok, CREATE_RESUME)
+用户：「技能再加 TypeScript」→ 上下文有 skill 条目则 patch_item_bullets(append)；否则 add_section_item(skill) + report_turn_meta(mutation_ok, PATCH_FIELD 或 CREATE_RESUME)
 用户：「把字节那条第二条改成…」→ patch_item_bullets + report_turn_meta(mutation_ok, PATCH_FIELD)
 用户：「帮我润色字节经历第一条」→ request_polish + report_turn_meta(polish, OPTIMIZE_TEXT)
 用户：「哪段经历？」→ report_turn_meta(need_clarification, GENERAL_CHAT, clarifyHint: 要改哪一段工作经历？)
@@ -122,7 +131,8 @@ export const RESUME_AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = 
     type: 'function',
     function: {
       name: 'add_section_item',
-      description: '向指定类型模块追加一条经历/教育/项目/技能条目',
+      description:
+        '向指定类型模块追加一条条目。skill 模块用于技术栈/技能；用户给出技能名时直接写入，无需长描述',
       parameters: {
         type: 'object',
         required: ['moduleType', 'item'],
@@ -135,11 +145,16 @@ export const RESUME_AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = 
             type: 'object',
             required: ['title'],
             properties: {
-              title: { type: 'string', description: '条目标题，如公司+职位' },
+              title: {
+                type: 'string',
+                description:
+                  '条目标题：经历=公司+职位；项目=项目名；skill=技能类别如「技术栈」「前端技术」',
+              },
               bullets: {
                 type: 'array',
                 items: { type: 'string' },
-                description: '工作/项目描述要点',
+                description:
+                  '要点列表：经历/项目=描述要点；skill=具体技能名（Vue、CSS 等，每项一条或合并）',
               },
             },
           },
@@ -172,7 +187,8 @@ export const RESUME_AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = 
     type: 'function',
     function: {
       name: 'patch_item_bullets',
-      description: '追加、替换或删除某条目的一条 bullet',
+      description:
+        '追加、替换或删除某条目的一条 bullet；向已有 skill 条目补充技能名时用 op=append',
       parameters: {
         type: 'object',
         required: ['itemId', 'op'],
