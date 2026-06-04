@@ -6,6 +6,9 @@ import {
 import type { PgLikePool } from "@simple-resume/sqlite-pg";
 import { ZodError } from "zod";
 
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   monorepoRootFromModuleDir,
   parseExportStorageTarget,
@@ -66,7 +69,7 @@ export async function runExportJobStep(
     }
 
     const storage = parseExportStorageTarget(
-      monorepoRootFromModuleDir(__dirname),
+      monorepoRootFromModuleDir(dirname(fileURLToPath(import.meta.url))),
     );
     if (!storage) {
       await markExportFailed(

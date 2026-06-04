@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   isSidebarTemplateId,
@@ -57,15 +58,17 @@ export type ResumeExportParts = {
   templateBody: string;
 };
 
+const renderDir = dirname(fileURLToPath(import.meta.url));
+
 function monorepoRoot(): string {
-  return join(__dirname, '../../../..');
+  return join(renderDir, '../../../..');
 }
 
 function loadResumePreviewCss(): string {
   const candidates = [
     join(monorepoRoot(), 'web/src/styles/resume-preview.css'),
-    join(__dirname, 'resume-preview.css'),
-    join(__dirname, '../../../src/worker/render/resume-preview.css'),
+    join(renderDir, 'resume-preview.css'),
+    join(renderDir, '../../../src/worker/render/resume-preview.css'),
   ];
   for (const path of candidates) {
     if (existsSync(path)) {
