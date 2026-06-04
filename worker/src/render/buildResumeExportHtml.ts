@@ -8,7 +8,7 @@ import {
   type ResumeModule,
   type ResumeSectionItem,
   type ResumeTemplateId,
-} from '../../contracts/index';
+} from '../contracts/index.js';
 
 import {
   RP_A4_HEIGHT_PX,
