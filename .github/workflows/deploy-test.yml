@@ -18,6 +18,7 @@ env:
   TEST_PM2_API_NAME: ${{ vars.TEST_PM2_API_NAME || 'simple-resume-api' }}
   TEST_PM2_WORKER_NAME: ${{ vars.TEST_PM2_WORKER_NAME || 'simple-resume-worker' }}
   TEST_SQLITE_DATABASE_PATH: ${{ vars.TEST_SQLITE_DATABASE_PATH || '/home/ubuntu/projects/simple-resume/db/simple-resume.db' }}
+  TEST_EXPORT_LOCAL_DIR: ${{ vars.TEST_EXPORT_LOCAL_DIR || '/home/ubuntu/projects/simple-resume/exports' }}
   TEST_SSH_OPTIONS: >-
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
@@ -109,7 +110,7 @@ jobs:
             -p "$TEST_SSH_PORT" \
             $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
-            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' TEST_SQLITE_DATABASE_PATH='$TEST_SQLITE_DATABASE_PATH' bash -s" <<'REMOTE_SCRIPT'
+            "TEST_SERVER_DIR='$TEST_SERVER_DIR' TEST_PM2_API_NAME='$TEST_PM2_API_NAME' TEST_PM2_WORKER_NAME='$TEST_PM2_WORKER_NAME' TEST_SQLITE_DATABASE_PATH='$TEST_SQLITE_DATABASE_PATH' TEST_EXPORT_LOCAL_DIR='$TEST_EXPORT_LOCAL_DIR' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
 
           export NODE_ENV=production
@@ -131,6 +132,19 @@ jobs:
           }
           upsert_env SESSION_COOKIE_SECURE false
           upsert_env TRUST_PROXY true
+
+          # Worker 上传导出 PDF、API 签发下载链接均依赖 S3 或 EXPORT_LOCAL_DIR
+          if ! mkdir -p "$TEST_EXPORT_LOCAL_DIR" 2>/dev/null; then
+            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              sudo -n mkdir -p "$TEST_EXPORT_LOCAL_DIR"
+              remote_group="$(id -gn)"
+              sudo -n chown -R "$(whoami):$remote_group" "$TEST_EXPORT_LOCAL_DIR"
+            else
+              echo "Cannot create export dir $TEST_EXPORT_LOCAL_DIR"
+              exit 1
+            fi
+          fi
+          upsert_env EXPORT_LOCAL_DIR "$TEST_EXPORT_LOCAL_DIR"
 
           pnpm_cmd() {
             corepack pnpm@10.33.0 "$@"
