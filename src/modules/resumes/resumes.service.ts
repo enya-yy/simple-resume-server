@@ -17,6 +17,7 @@ import {
   type ResumeDocument,
 } from '../../contracts/index';
 import { ZodError } from 'zod';
+import { extractResumeListPreview } from './resume-list-preview';
 import { ResumesRepository } from './resumes.repository';
 
 @Injectable()
@@ -28,11 +29,15 @@ export class ResumesService {
   async listResumes(userId: string) {
     const rows = await this.resumesRepository.listResumesForOwner(userId);
     return listResumesResponseSchema.parse({
-      resumes: rows.map((row) => ({
-        resumeId: row.resume_id,
-        title: row.title,
-        updatedAt: row.updated_at.toISOString(),
-      })),
+      resumes: rows.map((row) => {
+        const preview = extractResumeListPreview(row.document_json);
+        return {
+          resumeId: row.resume_id,
+          title: row.title,
+          updatedAt: row.updated_at.toISOString(),
+          ...preview,
+        };
+      }),
     });
   }
 

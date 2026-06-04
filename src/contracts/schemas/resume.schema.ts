@@ -11,15 +11,12 @@ import type {
 } from '../types/resume';
 
 export const RESUME_TEMPLATE_IDS = [
-  'amber-elegant',
-  'obsidian-gold',
+  'classic-list',
+  'minimal-dual',
 ] as const satisfies readonly ResumeTemplateId[];
 
 /** 双栏/侧栏模板（固定页边距） */
-export const SIDEBAR_TEMPLATE_IDS = [
-  'amber-elegant',
-  'obsidian-gold',
-] as const satisfies readonly ResumeTemplateId[];
+export const SIDEBAR_TEMPLATE_IDS = ['minimal-dual'] as const satisfies readonly ResumeTemplateId[];
 
 export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
   return (SIDEBAR_TEMPLATE_IDS as readonly string[]).includes(templateId);
@@ -27,25 +24,25 @@ export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
 
 /** 模版库与编辑器内选择器共用文案，避免漂移 */
 export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplateId, string> = {
-  'amber-elegant': '琥珀雅致',
-  'obsidian-gold': '曜黑鎏金',
+  'classic-list': '经典单列',
+  'minimal-dual': '极简双栏',
 };
 
-export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'amber-elegant';
+export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'classic-list';
 
 /** 读库时将已删除的旧 templateId 映射到新模板 */
 const LEGACY_TEMPLATE_ID_MAP: Record<string, ResumeTemplateId> = {
-  'classic-list': 'amber-elegant',
-  'minimal-dual': 'amber-elegant',
-  'professional-two-column': 'amber-elegant',
-  'header-icon': 'amber-elegant',
-  'creative-gradient': 'amber-elegant',
-  'sidebar-forest': 'amber-elegant',
-  'executive-navy': 'obsidian-gold',
-  'demo-amber-elegant': 'amber-elegant',
-  'demo-obsidian-gold': 'obsidian-gold',
-  'emerald-luxe': 'amber-elegant',
-  'demo-emerald-luxe': 'amber-elegant',
+  'amber-elegant': 'classic-list',
+  'obsidian-gold': 'minimal-dual',
+  'professional-two-column': 'classic-list',
+  'header-icon': 'classic-list',
+  'creative-gradient': 'classic-list',
+  'sidebar-forest': 'minimal-dual',
+  'executive-navy': 'minimal-dual',
+  'demo-amber-elegant': 'classic-list',
+  'demo-obsidian-gold': 'minimal-dual',
+  'emerald-luxe': 'classic-list',
+  'demo-emerald-luxe': 'classic-list',
 };
 
 export const resumeTemplateIdSchema = z.enum(RESUME_TEMPLATE_IDS);
@@ -499,10 +496,26 @@ export const createResumeResponseSchema = z.object({
 /** POST /resumes/:resumeId/duplicate — 与新建响应形状一致 */
 export const duplicateResumeResponseSchema = createResumeResponseSchema;
 
+/** 列表缩略图：允许未填写的 basics，不做编辑器提交级校验 */
+export const resumeListPreviewBasicsSchema = z.object({
+  fullName: z.string().trim().max(80),
+  email: z.string().trim().max(254),
+  phone: z.string().trim().max(40),
+  location: z.string().trim().max(120),
+  headline: z.string().trim().max(120),
+  summary: z.string().trim().max(2000),
+});
+
+/** GET /resumes 列表项：含缩略图所需预览字段（非完整 document） */
 export const resumeListItemSchema = z.object({
   resumeId: resumeIdSchema,
   title: z.string(),
   updatedAt: z.string().datetime(),
+  templateId: resumeTemplateIdLooseSchema,
+  layoutOptions: resumeLayoutOptionsStrictSchema,
+  previewBasics: resumeListPreviewBasicsSchema,
+  previewSections: z.array(resumeModuleSchema).max(2),
+  sectionCount: z.number().int().nonnegative(),
 });
 
 export const listResumesResponseSchema = z.object({

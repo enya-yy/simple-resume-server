@@ -7,7 +7,7 @@ import {
   type ResumeModule,
   type ResumeSectionItem,
   type ResumeTemplateId,
-} from '../../contracts/index';
+} from '../../contracts/index.js';
 
 const PDF_EXPORT_STYLE = `
 @page { size: A4; margin: 10mm; }
@@ -45,102 +45,6 @@ function escapeHtml(s: string): string {
 
 function md(text: string): string {
   return resumeMarkdownToSafeHtml(text ?? '');
-}
-
-const DATE_RANGE_RE =
-  /^(\d{4}[./-]\d{1,2}(?:\s*[-–—至]\s*(?:\d{4}[./-]\d{1,2}|至今))?|至今\s*[-–—至]\s*\d{4}[./-]\d{1,2})/;
-
-function isDateRange(text: string): boolean {
-  return DATE_RANGE_RE.test(text.trim());
-}
-
-function parseTimelineEntry(item: ResumeSectionItem) {
-  const bullets = [...item.bullets];
-  let dateRange = '';
-  let subtitle = '';
-  if (bullets.length > 0 && isDateRange(bullets[0]!)) {
-    dateRange = bullets.shift()!.trim();
-  }
-  if (
-    bullets.length > 0 &&
-    bullets[0]!.trim() &&
-    bullets[0]!.trim().length <= 120 &&
-    !/^[•\-*]/.test(bullets[0]!.trim())
-  ) {
-    subtitle = bullets.shift()!.trim();
-  }
-  return { title: item.title.trim() || '（未命名条目）', dateRange, subtitle, bullets };
-}
-
-function parseEducationEntry(item: ResumeSectionItem) {
-  const bullets = [...item.bullets];
-  const degree = bullets.shift()?.trim() ?? '';
-  let dateRange = '';
-  if (bullets.length > 0 && isDateRange(bullets[0]!)) {
-    dateRange = bullets.shift()!.trim();
-  }
-  return { school: item.title.trim() || '（学校）', degree, dateRange };
-}
-
-function parseSkillPercent(item: ResumeSectionItem) {
-  const raw = (item.bullets[0] ?? '').trim();
-  const match = raw.match(/(\d{1,3})/);
-  const percent = match
-    ? Math.min(100, Math.max(0, Number.parseInt(match[1]!, 10)))
-    : 80;
-  return { label: item.title.trim() || raw || '技能', percent };
-}
-
-function parseSkillDots(item: ResumeSectionItem) {
-  const raw = (item.bullets[0] ?? '').trim();
-  const match = raw.match(/([1-5])/);
-  const level = match ? Number.parseInt(match[1]!, 10) : 3;
-  return { label: item.title.trim() || '工具', level };
-}
-
-function parseObsidianHeadline(headline: string): { romanization: string; jobTitle: string } {
-  const trimmed = headline.trim();
-  if (!trimmed) {
-    return { romanization: '', jobTitle: '' };
-  }
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length >= 2) {
-    return { romanization: lines[0]!, jobTitle: lines.slice(1).join(' ') };
-  }
-  return { romanization: '', jobTitle: trimmed };
-}
-
-function parseMetricCard(item: ResumeSectionItem) {
-  return {
-    label: item.title.trim() || '指标',
-    value: (item.bullets[0] ?? '').trim() || '—',
-    caption: (item.bullets[1] ?? '').trim(),
-  };
-}
-
-function sectionsOfType(sections: ResumeModule[], type: ResumeModule['type']) {
-  return sections.filter((s) => s.type === type);
-}
-
-function sectionByHint(sections: ResumeModule[], ...hints: string[]) {
-  return sections.find((s) => hints.some((h) => s.title.includes(h))) ?? null;
-}
-
-function skillSections(sections: ResumeModule[]) {
-  return sectionsOfType(sections, 'skill');
-}
-
-function nameInitials(fullName: string): string {
-  const n = fullName.trim();
-  if (!n) return '·';
-  const parts = n.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2 && /^[\x20-\x7F]+$/.test(n)) {
-    return `${parts[0]!.charAt(0)}${parts[1]!.charAt(0)}`.toUpperCase();
-  }
-  return n.slice(0, 2);
 }
 
 function rpRootClass(doc: ResumeDocument): string {
@@ -183,178 +87,143 @@ ${body}
 </html>`;
 }
 
-function buildAmberExportHtml(doc: ResumeDocument): string {
+function parseYearLeadEntry(item: ResumeSectionItem) {
+  const bullets = [...item.bullets];
+  let dateVal = '';
+  if (bullets.length > 0 && /^\d{4}/.test(bullets[0]!)) {
+    dateVal = bullets.shift()!.trim();
+  }
+  return { dateVal, bullets };
+}
+
+function sectionTypeEnLabel(type: ResumeModule['type']): string {
+  switch (type) {
+    case 'experience':
+      return 'Work Experience';
+    case 'education':
+      return 'Education';
+    case 'project':
+      return 'Project Showcases';
+    case 'skill':
+      return 'Core Skills';
+    case 'custom':
+      return 'Additional Notes';
+    default:
+      return '';
+  }
+}
+
+function sortedSections(sections: ResumeModule[]): ResumeModule[] {
+  return [...sections].sort((a, b) => a.order - b.order);
+}
+
+function buildClassicExportHtml(doc: ResumeDocument): string {
   const b = doc.basics;
-  const skills = skillSections(doc.sections);
-  const progress = (
-    skills.find((s) => s.title.includes('核心')) ?? skills[0]
-  )?.items ?? [];
-  const dots = (
-    skills.find((s) => s.title.includes('工具')) ?? skills[1]
-  )?.items ?? [];
-  const experience =
-    sectionByHint(doc.sections, '工作', '经历') ??
-    sectionsOfType(doc.sections, 'experience')[0];
-  const education =
-    sectionByHint(doc.sections, '教育') ??
-    sectionsOfType(doc.sections, 'education')[0];
-  const awards =
-    sectionByHint(doc.sections, '荣誉', '奖项') ??
-    sectionsOfType(doc.sections, 'custom')[0];
-
-  const profile = `<header class="rp-amber__profile">
-    <div class="rp-amber__profile-text">
-      <h1 class="rp-amber__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>
-      ${b.headline.trim() ? `<p class="rp-amber__role">${escapeHtml(b.headline)}</p>` : ''}
-      <div class="rp-amber__contacts">
-        ${b.phone.trim() ? `<div class="rp-amber__contact"><span class="rp-amber__contact-icon">📱</span>${escapeHtml(b.phone)}</div>` : ''}
-        ${b.email.trim() ? `<div class="rp-amber__contact"><span class="rp-amber__contact-icon">✉️</span>${escapeHtml(b.email)}</div>` : ''}
-        ${b.location.trim() ? `<div class="rp-amber__contact"><span class="rp-amber__contact-icon">📍</span>${escapeHtml(b.location)}</div>` : ''}
-      </div>
-    </div>
-    <div class="rp-amber__avatar-wrap"><div class="rp-amber__avatar-glow"></div><div class="rp-amber__avatar"><span class="rp-amber__avatar-initials">${escapeHtml(nameInitials(b.fullName))}</span></div></div>
-  </header>`;
-
+  const header = `<header class="rp-classic__header"><h1 class="rp-classic__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-classic__headline">${escapeHtml(b.headline)}</p>` : ''}<div class="rp-classic__contacts">${b.phone.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">☎</span>${escapeHtml(b.phone)}</span>` : ''}${b.email.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">✉</span><span class="rp-classic__email">${escapeHtml(b.email)}</span></span>` : ''}${b.location.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">⌖</span>${escapeHtml(b.location)}</span>` : ''}</div></header>`;
   const summary = b.summary.trim()
-    ? `<section class="rp-amber__block"><h2 class="rp-amber__section-title">个人简介</h2><div class="rp-amber__body-text rp-md">${md(b.summary)}</div></section>`
+    ? `<section class="rp-classic__summary-block"><div class="rp-classic__summary-label">个人简介 · Profile Summary</div><p class="rp-classic__summary-text rp-md">${md(b.summary)}</p></section>`
     : '';
-
-  const expHtml = experience?.items.length
-    ? `<section class="rp-amber__block"><h2 class="rp-amber__section-title">工作经历</h2><div class="rp-amber__timeline">${experience.items
-        .map((item, idx) => {
-          const e = parseTimelineEntry(item);
-          return `<div class="rp-amber__timeline-item"><span class="rp-amber__timeline-dot${idx > 0 ? ' rp-amber__timeline-dot--muted' : ''}"></span><div class="rp-amber__timeline-head"><h3 class="rp-amber__entry-title">${escapeHtml(e.title)}</h3>${e.dateRange ? `<span class="rp-amber__date-badge${idx > 0 ? ' rp-amber__date-badge--muted' : ''}">${escapeHtml(e.dateRange)}</span>` : ''}</div>${e.bullets.length ? `<ul class="rp-amber__bullet-list">${e.bullets.map((bl) => `<li class="rp-md">${md(bl)}</li>`).join('')}</ul>` : ''}</div>`;
-        })
-        .join('')}</div></section>`
-    : '';
-
-  const eduHtml = education?.items.length
-    ? `<section class="rp-amber__block"><h2 class="rp-amber__section-title">教育背景</h2>${education.items
+  const sectionsHtml = sortedSections(doc.sections)
+    .filter((s) => s.items.length > 0)
+    .map((section) => {
+      const items = section.items
         .map((item) => {
-          const e = parseEducationEntry(item);
-          return `<div class="rp-amber__edu-row"><div><span class="rp-amber__edu-school">${escapeHtml(e.school)}</span>${e.degree ? `<span class="rp-amber__edu-sep">|</span><span class="rp-amber__edu-degree">${escapeHtml(e.degree)}</span>` : ''}</div>${e.dateRange ? `<span class="rp-amber__edu-date">${escapeHtml(e.dateRange)}</span>` : ''}</div>`;
-        })
-        .join('')}</section>`
-    : '';
-
-  const sidebarSkills = progress.length
-    ? `<div class="rp-amber__sidebar-block"><h3 class="rp-amber__sidebar-title">核心技能</h3><div class="rp-amber__skill-bars">${progress
-        .map((item) => {
-          const s = parseSkillPercent(item);
-          return `<div class="rp-amber__skill-bar"><div class="rp-amber__skill-bar-labels"><span>${escapeHtml(s.label)}</span><span>${s.percent}%</span></div><div class="rp-amber__skill-bar-track"><div class="rp-amber__skill-bar-fill" style="width:${s.percent}%"></div></div></div>`;
-        })
-        .join('')}</div></div>`
-    : '';
-
-  const sidebarDots = dots.length
-    ? `<div class="rp-amber__sidebar-block"><h3 class="rp-amber__sidebar-title">工具技能</h3><div class="rp-amber__dot-skills">${dots
-        .map((item) => {
-          const s = parseSkillDots(item);
-          const dotsHtml = Array.from({ length: 5 }, (_, i) =>
-            `<span class="rp-amber__dot${i < s.level ? ' rp-amber__dot--filled' : ''}"></span>`,
-          ).join('');
-          return `<div class="rp-amber__dot-row"><span>${escapeHtml(s.label)}</span><div class="rp-amber__dots">${dotsHtml}</div></div>`;
-        })
-        .join('')}</div></div>`
-    : '';
-
-  const sidebarAwards = awards?.items.length
-    ? `<div class="rp-amber__sidebar-block"><h3 class="rp-amber__sidebar-title">荣誉奖项</h3><ul class="rp-amber__awards">${awards.items
-        .map((item) =>
-          item.bullets.length
-            ? item.bullets
+          const e = parseYearLeadEntry(item);
+          const bullets = e.bullets.length
+            ? `<ul class="rp-classic__bullet-list">${e.bullets
                 .map(
                   (bl) =>
-                    `<li><div class="rp-amber__award-line"><span class="rp-amber__award-bullet">•</span><span class="rp-md">${md(bl)}</span></div></li>`,
+                    `<li class="rp-classic__bullet"><span class="rp-classic__bullet-marker"></span><span class="rp-classic__bullet-text"><span class="rp-md">${md(bl)}</span></span></li>`,
                 )
-                .join('')
-            : `<li><div class="rp-amber__award-line"><span class="rp-amber__award-bullet">•</span><span>${escapeHtml(item.title)}</span></div></li>`,
-        )
-        .join('')}</ul></div>`
-    : '';
-
-  const body = `<div class="rp-amber"><div class="rp-amber__sheet"><div class="rp-amber__main">${profile}${summary}${expHtml}${eduHtml}</div><aside class="rp-amber__sidebar">${sidebarSkills}${sidebarDots}${sidebarAwards}</aside></div></div>`;
+                .join('')}</ul>`
+            : '';
+          return `<div class="rp-classic__item"><div class="rp-classic__item-head"><h3 class="rp-classic__item-title">${escapeHtml(item.title)}</h3>${e.dateVal ? `<span class="rp-classic__item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
+        })
+        .join('');
+      return `<section class="rp-classic__section"><h2 class="rp-classic__section-title"><span>${escapeHtml(section.title)}</span><span class="rp-classic__section-en">${sectionTypeEnLabel(section.type)}</span></h2><div class="rp-classic__items">${items}</div></section>`;
+    })
+    .join('');
+  const footer = `<footer class="rp-classic__footer"><span>核验码: RE-2026-639A4 | 林晓晨-中文简历</span><span class="rp-classic__footer-badge">✓ 经一键脱敏排版印制</span></footer>`;
+  const body = `<div id="resume-classic" class="rp-classic">${header}${summary}<div class="rp-classic__sections">${sectionsHtml}</div>${footer}</div>`;
   return wrapExportHtml(rpRootClass(doc), body);
 }
 
-function buildObsidianExportHtml(doc: ResumeDocument): string {
+function buildMinimalDualExportHtml(doc: ResumeDocument): string {
   const b = doc.basics;
-  const competencies =
-    sectionByHint(doc.sections, '核心优势', '优势') ??
-    sectionsOfType(doc.sections, 'custom').find((s) => !s.title.includes('荣誉'));
-  const skills = skillSections(doc.sections)[0] ?? sectionByHint(doc.sections, '技能');
-  const education =
-    sectionsOfType(doc.sections, 'education')[0] ?? sectionByHint(doc.sections, '教育');
-  const experience =
-    sectionsOfType(doc.sections, 'experience')[0] ?? sectionByHint(doc.sections, '工作');
-  const metrics =
-    sectionByHint(doc.sections, '数字', '指标', 'Metrics', '项目') ??
-    sectionsOfType(doc.sections, 'project')[0];
+  const sections = sortedSections(doc.sections);
+  const sidebar = sections.filter((s) => s.type === 'skill' || s.type === 'custom');
+  const main = sections.filter((s) => s.type !== 'skill' && s.type !== 'custom');
 
-  const heroHeadline = parseObsidianHeadline(b.headline);
-  const hero = `<header class="rp-obsidian__hero"><div class="rp-obsidian__hero-grid"></div><div class="rp-obsidian__hero-inner"><div><h1 class="rp-obsidian__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${heroHeadline.romanization ? `<p class="rp-obsidian__headline-en">${escapeHtml(heroHeadline.romanization)}</p>` : ''}${heroHeadline.jobTitle ? `<p class="rp-obsidian__headline">${escapeHtml(heroHeadline.jobTitle)}</p>` : ''}</div><div class="rp-obsidian__hero-contacts">${b.location.trim() ? `<div>📍 ${escapeHtml(b.location)}</div>` : ''}${b.phone.trim() ? `<div>📞 ${escapeHtml(b.phone)}</div>` : ''}${b.email.trim() ? `<div>✉️ ${escapeHtml(b.email)}</div>` : ''}</div></div></header>`;
+  const identity = `<div class="rp-modern__identity"><h1 class="rp-modern__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-modern__headline">${escapeHtml(b.headline)}</p>` : ''}</div>`;
+  const contacts = `<div class="rp-modern__contacts-panel"><div class="rp-modern__contacts-label">联系方式 · Contacts</div><div class="rp-modern__contacts-list">${b.phone.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">☎</span><span>${escapeHtml(b.phone)}</span></div>` : ''}${b.email.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">✉</span><span class="rp-modern__email">${escapeHtml(b.email)}</span></div>` : ''}${b.location.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">⌖</span><span>${escapeHtml(b.location)}</span></div>` : ''}</div></div>`;
 
-  const leftComp = competencies?.items.length
-    ? `<section class="rp-obsidian__left-block"><h2 class="rp-obsidian__left-badge">核心优势 (Competencies)</h2><div class="rp-obsidian__competencies">${competencies.items
-        .map(
-          (item, idx) =>
-            `<div class="rp-obsidian__competency"><span class="rp-obsidian__competency-num">${idx + 1}</span><p class="rp-md">${md(item.bullets[0] || item.title)}</p></div>`,
-        )
-        .join('')}</div></section>`
-    : '';
-
-  const leftSkills = skills?.items.length
-    ? `<section class="rp-obsidian__left-block"><h2 class="rp-obsidian__left-heading">专业技能</h2><ul class="rp-obsidian__skill-list">${skills.items
-        .map(
-          (item) =>
-            `<li><span class="rp-obsidian__skill-icon">⚖️</span><span>${escapeHtml(item.title || item.bullets[0] || '')}</span></li>`,
-        )
-        .join('')}</ul></section>`
-    : '';
-
-  const leftEdu = education?.items.length
-    ? `<section class="rp-obsidian__left-block"><h2 class="rp-obsidian__left-heading">教育背景</h2>${education.items
+  const sidebarHtml = sidebar
+    .filter((s) => s.items.length > 0)
+    .map((section) => {
+      const items = section.items
         .map((item) => {
-          const e = parseEducationEntry(item);
-          return `<div class="rp-obsidian__edu"><p class="rp-obsidian__edu-school">${escapeHtml(e.school)}</p>${e.degree ? `<p class="rp-obsidian__edu-degree">${escapeHtml(e.degree)}</p>` : ''}${e.dateRange ? `<p class="rp-obsidian__edu-date">${escapeHtml(e.dateRange)}</p>` : ''}</div>`;
+          const title = item.title.trim()
+            ? `<h3 class="rp-modern__sidebar-item-title"><span class="rp-modern__sidebar-dot"></span><span>${escapeHtml(item.title)}</span></h3>`
+            : '';
+          const bullets = item.bullets
+            .map((bl) => {
+              if (section.type === 'skill' && /[、,，]/.test(bl)) {
+                const tags = bl.split(/[、,，]\s*/).filter(Boolean);
+                return `<div class="rp-modern__skill-tags">${tags.map((t) => `<span class="rp-modern__skill-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+              }
+              return `<p class="rp-modern__sidebar-bullet"><span class="rp-modern__sidebar-bullet-dot">•</span><span class="rp-md">${md(bl)}</span></p>`;
+            })
+            .join('');
+          return `<div class="rp-modern__sidebar-item">${title}${bullets}</div>`;
         })
-        .join('')}</section>`
-    : '';
+        .join('');
+      return `<section class="rp-modern__sidebar-section"><h2 class="rp-modern__sidebar-title">${escapeHtml(section.title)}</h2><div class="rp-modern__sidebar-items">${items}</div></section>`;
+    })
+    .join('');
 
   const summary = b.summary.trim()
-    ? `<section class="rp-obsidian__main-block"><h2 class="rp-obsidian__main-title"><span>个人简介</span><span class="rp-obsidian__main-title-en">SUMMARY</span></h2><div class="rp-obsidian__body-text rp-md">${md(b.summary)}</div></section>`
+    ? `<section class="rp-modern__summary"><p class="rp-modern__summary-text rp-md">${md(b.summary)}</p></section>`
     : '';
 
-  const expHtml = experience?.items.length
-    ? `<section class="rp-obsidian__main-block"><h2 class="rp-obsidian__main-title rp-obsidian__main-title--plain">工作经历</h2><div class="rp-obsidian__entries">${experience.items
-        .map((item, idx) => {
-          const e = parseTimelineEntry(item);
-          return `<div class="rp-obsidian__entry"><div class="rp-obsidian__entry-head"><h3 class="rp-obsidian__entry-title">${escapeHtml(e.title)}</h3>${e.dateRange ? `<span class="rp-obsidian__date-badge${idx > 0 ? ' rp-obsidian__date-badge--muted' : ''}">${escapeHtml(e.dateRange)}</span>` : ''}</div>${e.subtitle ? `<p class="rp-obsidian__entry-sub">${escapeHtml(e.subtitle)}</p>` : ''}${e.bullets.length ? `<ul class="rp-obsidian__bullet-list">${e.bullets.map((bl) => `<li class="rp-md">${md(bl)}</li>`).join('')}</ul>` : ''}</div>`;
-        })
-        .join('')}</div></section>`
-    : '';
-
-  const metricsHtml = metrics?.items.length
-    ? `<section class="rp-obsidian__main-block"><h2 class="rp-obsidian__metrics-title">🏆 核心项目数字回报 (Key Metrics)</h2><div class="rp-obsidian__metrics-grid">${metrics.items
+  const mainHtml = main
+    .filter((s) => s.items.length > 0)
+    .map((section) => {
+      const icon =
+        section.type === 'experience'
+          ? '💻'
+          : section.type === 'education'
+            ? '📖'
+            : section.type === 'project'
+              ? '📚'
+              : '⚙';
+      const suffix = section.id.split('-')[1]?.toUpperCase() ?? '';
+      const items = section.items
         .map((item) => {
-          const m = parseMetricCard(item);
-          return `<div class="rp-obsidian__metric-card"><p class="rp-obsidian__metric-label">${escapeHtml(m.label)}</p><span class="rp-obsidian__metric-value">${escapeHtml(m.value)}</span>${m.caption ? `<p class="rp-obsidian__metric-caption">${escapeHtml(m.caption)}</p>` : ''}</div>`;
+          const e = parseYearLeadEntry(item);
+          const bullets = e.bullets.length
+            ? `<ul class="rp-modern__bullet-list">${e.bullets
+                .map(
+                  (bl) =>
+                    `<li class="rp-modern__bullet"><span class="rp-modern__bullet-marker"></span><span class="rp-md">${md(bl)}</span></li>`,
+                )
+                .join('')}</ul>`
+            : '';
+          return `<div class="rp-modern__main-item"><div class="rp-modern__main-item-head"><h3 class="rp-modern__main-item-title">${escapeHtml(item.title)}</h3>${e.dateVal ? `<span class="rp-modern__main-item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
         })
-        .join('')}</div></section>`
-    : '';
+        .join('');
+      return `<section class="rp-modern__main-section"><h2 class="rp-modern__main-title"><span class="rp-modern__main-title-left"><span class="rp-modern__main-icon">${icon}</span><span>${escapeHtml(section.title)}</span></span><span class="rp-modern__main-title-suffix">${escapeHtml(suffix)}</span></h2><div class="rp-modern__main-items">${items}</div></section>`;
+    })
+    .join('');
 
-  const body = `<div class="rp-obsidian"><div class="rp-obsidian__sheet">${hero}<div class="rp-obsidian__body"><aside class="rp-obsidian__left">${leftComp}${leftSkills}${leftEdu}</aside><div class="rp-obsidian__main">${summary}${expHtml}${metricsHtml}</div></div></div></div>`;
+  const footer = `<footer class="rp-modern__footer"><span>SECURITY LEVEL: NORMAL / DATA SHIELD MASKING ENABLED</span><span>林晓晨 · iOS/Vue/TypeScript 开发者简历</span></footer>`;
+  const body = `<div id="resume-modern" class="rp-modern"><div class="rp-modern__accent"></div><div class="rp-modern__grid"><aside class="rp-modern__sidebar">${identity}${contacts}${sidebarHtml}</aside><div class="rp-modern__main">${summary}${mainHtml}</div></div>${footer}</div>`;
   return wrapExportHtml(rpRootClass(doc), body);
 }
 
 /** 生成与 `ResumePreview.vue` 同结构 HTML，供 headless PDF 使用。 */
 export function buildResumeExportHtml(doc: ResumeDocument): string {
-  const templateId: ResumeTemplateId = doc.templateId;
-  switch (templateId) {
-    case 'obsidian-gold':
-      return buildObsidianExportHtml(doc);
-    case 'amber-elegant':
-    default:
-      return buildAmberExportHtml(doc);
+  if (doc.templateId === 'minimal-dual') {
+    return buildMinimalDualExportHtml(doc);
   }
+  return buildClassicExportHtml(doc);
 }

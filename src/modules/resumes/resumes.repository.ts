@@ -20,6 +20,7 @@ export interface ResumeListRow {
   resume_id: string;
   title: string;
   updated_at: Date;
+  document_json: unknown;
 }
 
 export interface ResumeRowForOwner {
@@ -43,7 +44,7 @@ export class ResumesRepository {
 
   async listResumesForOwner(userId: string): Promise<ResumeListRow[]> {
     const result = await this.pool.query<ResumeListRow>(
-      `SELECT id AS resume_id, title, updated_at
+      `SELECT id AS resume_id, title, updated_at, document_json
        FROM resumes
        WHERE user_id = $1
        ORDER BY updated_at DESC, created_at DESC`,
