@@ -10,8 +10,8 @@ import {
   monorepoRootFromModuleDir,
   parseExportStorageTarget,
 } from '../config/export-storage.js';
-import { buildResumeExportHtml } from './render/buildResumeExportHtml.js';
-import { renderHtmlToPdfBuffer } from './render/renderPdf.js';
+import { buildResumeExportParts } from './render/buildResumeExportHtml.js';
+import { renderResumeExportPartsToPdf } from './render/renderPdf.js';
 import { saveExportPdf } from './storage/saveExportArtifact.js';
 
 const MSG_RENDER =
@@ -125,8 +125,8 @@ export async function runExportJobStep(
     try {
       // 与编辑器预览一致：导出本人简历时不套用敏感字段隐藏（聊天预览 maskSensitive=false）
       const masked = applySensitiveFieldPolicy(parsed, { mask: false });
-      const html = buildResumeExportHtml(masked);
-      const pdf = await renderHtmlToPdfBuffer(html);
+      const parts = buildResumeExportParts(masked);
+      const pdf = await renderResumeExportPartsToPdf(parts);
       try {
         await saveExportPdf(storage, objectKey, pdf);
       } catch (uploadErr) {

@@ -1,4 +1,9 @@
-import { buildResumeExportHtml } from "./buildResumeExportHtml.js";
+import {
+  buildPaginatedExportHtml,
+  buildResumeExportHtml,
+  buildResumeExportParts,
+} from "./buildResumeExportHtml.js";
+import { hardCutPages } from "./computeResumePageLayout.js";
 import type { ResumeDocument } from "../contracts/index.js";
 
 describe("buildResumeExportHtml", () => {
@@ -118,5 +123,32 @@ describe("buildResumeExportHtml", () => {
     expect(html).toContain('id="resume-editorial"');
     expect(html).toContain("rp-editorial__band");
     expect(html).toContain("苏晚晴");
+  });
+
+  it("paginated export uses preview page roles and safe margins", () => {
+    const doc: ResumeDocument = {
+      templateId: "classic-list",
+      layoutOptions: {
+        fontSizeStep: 1,
+        pageMargin: "standard",
+        bodyLineHeight: "normal",
+      },
+      basics: {
+        fullName: "测试",
+        headline: "",
+        email: "",
+        phone: "",
+        location: "",
+        summary: "",
+      },
+      sections: [],
+    };
+    const parts = buildResumeExportParts(doc);
+    const pages = hardCutPages(2000);
+    const html = buildPaginatedExportHtml(parts, pages);
+    expect(html).toContain("rpp-page-viewport--first");
+    expect(html).toContain("rpp-page-viewport--last");
+    expect(html).toContain("padding: 0 0 36px");
+    expect(html).not.toContain("margin: 10mm");
   });
 });
