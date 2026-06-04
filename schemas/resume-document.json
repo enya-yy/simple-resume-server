@@ -13,7 +13,7 @@
   "properties": {
     "templateId": {
       "type": "string",
-      "enum": ["classic-list", "minimal-dual"],
+      "enum": ["classic-list", "minimal-dual", "executive-dark", "editorial-gold"],
       "description": "预览模板 ID；读库宽松解析时非法值会回落为 classic-list"
     },
     "layoutOptions": {

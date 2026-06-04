@@ -13,10 +13,15 @@ import type {
 export const RESUME_TEMPLATE_IDS = [
   'classic-list',
   'minimal-dual',
+  'executive-dark',
+  'editorial-gold',
 ] as const satisfies readonly ResumeTemplateId[];
 
 /** 双栏/侧栏模板（固定页边距） */
-export const SIDEBAR_TEMPLATE_IDS = ['minimal-dual'] as const satisfies readonly ResumeTemplateId[];
+export const SIDEBAR_TEMPLATE_IDS = [
+  'minimal-dual',
+  'executive-dark',
+] as const satisfies readonly ResumeTemplateId[];
 
 export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
   return (SIDEBAR_TEMPLATE_IDS as readonly string[]).includes(templateId);
@@ -26,6 +31,8 @@ export function isSidebarTemplateId(templateId: ResumeTemplateId): boolean {
 export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplateId, string> = {
   'classic-list': '经典单列',
   'minimal-dual': '极简双栏',
+  'executive-dark': '高管暗金',
+  'editorial-gold': '编辑金韵',
 };
 
 export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'classic-list';
@@ -38,7 +45,7 @@ const LEGACY_TEMPLATE_ID_MAP: Record<string, ResumeTemplateId> = {
   'header-icon': 'classic-list',
   'creative-gradient': 'classic-list',
   'sidebar-forest': 'minimal-dual',
-  'executive-navy': 'minimal-dual',
+  'executive-navy': 'executive-dark',
   'demo-amber-elegant': 'classic-list',
   'demo-obsidian-gold': 'minimal-dual',
   'emerald-luxe': 'classic-list',

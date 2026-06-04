@@ -7,7 +7,7 @@ import {
   type ResumeModule,
   type ResumeSectionItem,
   type ResumeTemplateId,
-} from '../../contracts/index.js';
+} from '../../contracts/index';
 
 const PDF_EXPORT_STYLE = `
 @page { size: A4; margin: 10mm; }
@@ -315,10 +315,180 @@ function buildMinimalDualExportHtml(doc: ResumeDocument): string {
   return wrapExportHtml(rpRootClass(doc), body);
 }
 
+function nameInitialChar(fullName: string): string {
+  const n = fullName.trim();
+  if (!n) {
+    return '·';
+  }
+  const asciiParts = n.split(/\s+/).filter(Boolean);
+  if (asciiParts.length >= 2 && /^[\x20-\x7F]+$/.test(n)) {
+    return `${asciiParts[0]!.charAt(0)}${asciiParts[1]!.charAt(0)}`.toUpperCase();
+  }
+  return n.charAt(0);
+}
+
+function buildExecutiveDarkExportHtml(doc: ResumeDocument): string {
+  const b = doc.basics;
+  const sections = sortedSections(doc.sections);
+  const sidebar = sections.filter((s) => s.type !== 'experience' && s.type !== 'project');
+  const main = sections.filter((s) => s.type === 'experience' || s.type === 'project');
+  const initial = escapeHtml(nameInitialChar(b.fullName.trim() || '（姓名）'));
+
+  const contacts = `<div class="rp-exec__contacts"><h3 class="rp-exec__contacts-label">联系方式</h3>${b.email.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">✉</span><span class="rp-exec__email">${escapeHtml(b.email)}</span></div>` : ''}${b.phone.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">☎</span><span>${escapeHtml(b.phone)}</span></div>` : ''}${b.location.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">⌖</span><span>${escapeHtml(b.location)}</span></div>` : ''}</div>`;
+
+  const sidebarHtml = sidebar
+    .filter((s) => s.items.length > 0)
+    .map((section) => {
+      const items = section.items
+        .map((item) => {
+          if (section.type === 'skill') {
+            const title = item.title.trim()
+              ? `<h4 class="rp-exec__sidebar-item-title">${escapeHtml(item.title)}</h4>`
+              : '';
+            const tags = item.bullets
+              .map((bl) => `<span class="rp-exec__skill-tag">${escapeHtml(bl)}</span>`)
+              .join('');
+            return `<div class="rp-exec__sidebar-item">${title}<div class="rp-exec__skill-tags">${tags}</div></div>`;
+          }
+          const e = parseYearLeadEntry(item);
+          const title = item.title.trim()
+            ? `<h4 class="rp-exec__sidebar-item-title">${escapeHtml(item.title)}</h4>`
+            : '';
+          const time = e.dateVal
+            ? `<p class="rp-exec__sidebar-date">${escapeHtml(e.dateVal)}</p>`
+            : '';
+          const bullets = e.bullets
+            .map((bl) => `<p class="rp-exec__sidebar-bullet"><span class="rp-md">${md(bl)}</span></p>`)
+            .join('');
+          return `<div class="rp-exec__sidebar-item">${title}${time}${bullets}</div>`;
+        })
+        .join('');
+      return `<section class="rp-exec__sidebar-section"><h3 class="rp-exec__sidebar-title">${escapeHtml(section.title)}</h3><div class="rp-exec__sidebar-items">${items}</div></section>`;
+    })
+    .join('');
+
+  const header = `<header class="rp-exec__header"><h1 class="rp-exec__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-exec__headline">${escapeHtml(b.headline)}</p>` : ''}</header>`;
+  const summary = b.summary.trim()
+    ? `<p class="rp-exec__summary rp-md">${md(b.summary)}</p>`
+    : '';
+
+  const mainHtml = main
+    .filter((s) => s.items.length > 0)
+    .map((section) => {
+      const items = section.items
+        .map((item) => {
+          const e = parseYearLeadEntry(item);
+          const title = item.title.trim()
+            ? `<h3 class="rp-exec__main-item-title">${escapeHtml(item.title)}</h3>`
+            : '';
+          const bullets = e.bullets.length
+            ? `<ul class="rp-exec__main-bullets">${e.bullets
+                .map(
+                  (bl) =>
+                    `<li class="rp-exec__main-bullet"><span class="rp-exec__main-bullet-marker">&gt;</span><span class="rp-md">${md(bl)}</span></li>`,
+                )
+                .join('')}</ul>`
+            : '';
+          return `<div class="rp-exec__main-item"><div class="rp-exec__timeline-dot"></div><div class="rp-exec__timeline-line"></div><div class="rp-exec__main-item-head">${title}${e.dateVal ? `<span class="rp-exec__main-item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
+        })
+        .join('');
+      return `<section class="rp-exec__main-section"><div class="rp-exec__main-section-head"><h2 class="rp-exec__main-section-title">${escapeHtml(section.title)}</h2><div class="rp-exec__main-section-line"></div></div><div class="rp-exec__main-items">${items}</div></section>`;
+    })
+    .join('');
+
+  const body = `<div id="resume-executive" class="rp-exec"><div class="rp-exec__accent"></div><div class="rp-exec__grid"><aside class="rp-exec__sidebar"><div class="rp-exec__avatar-wrap"><div class="rp-exec__avatar-ring"></div><div class="rp-exec__avatar-inner"></div><div class="rp-exec__avatar"><span class="rp-exec__avatar-initial">${initial}</span></div></div>${contacts}<div class="rp-exec__sidebar-sections">${sidebarHtml}</div></aside><div class="rp-exec__main">${header}${summary}<div class="rp-exec__main-sections">${mainHtml}</div></div></div><div class="rp-exec__corner rp-exec__corner--tr"></div><div class="rp-exec__corner rp-exec__corner--br"></div></div>`;
+  return wrapExportHtml(rpRootClass(doc), body);
+}
+
+function buildEditorialSectionTimeline(section: ResumeModule): string {
+  const items = section.items
+    .map((item) => {
+      const e = parseYearLeadEntry(item);
+      const title = item.title.trim()
+        ? `<h3 class="rp-editorial__item-title">${escapeHtml(item.title)}</h3>`
+        : '';
+      const bullets = e.bullets.length
+        ? `<ul class="rp-editorial__bullets">${e.bullets
+            .map(
+              (bl) =>
+                `<li class="rp-editorial__bullet"><span class="rp-editorial__bullet-marker">◆</span><span class="rp-md">${md(bl)}</span></li>`,
+            )
+            .join('')}</ul>`
+        : '';
+      return `<div class="rp-editorial__timeline-item"><span class="rp-editorial__timeline-dot"></span><div class="rp-editorial__item-head">${title}${e.dateVal ? `<span class="rp-editorial__item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
+    })
+    .join('');
+  const badge = escapeHtml(section.title.charAt(0));
+  return `<section class="rp-editorial__content-section"><div class="rp-editorial__section-head"><span class="rp-editorial__section-badge">${badge}</span><h2 class="rp-editorial__section-title">${escapeHtml(section.title)}</h2><span class="rp-editorial__section-line"></span></div><div class="rp-editorial__timeline">${items}</div></section>`;
+}
+
+function buildEditorialSideSection(section: ResumeModule): string {
+  const items = section.items
+    .map((item) => {
+      const e = parseYearLeadEntry(item);
+      const title = item.title.trim()
+        ? `<h4 class="rp-editorial__side-item-title">${escapeHtml(item.title)}</h4>`
+        : '';
+      const time = e.dateVal
+        ? `<p class="rp-editorial__side-date">${escapeHtml(e.dateVal)}</p>`
+        : '';
+      const bullets = e.bullets
+        .map((bl) => `<p class="rp-editorial__side-bullet"><span class="rp-md">${md(bl)}</span></p>`)
+        .join('');
+      return `<div class="rp-editorial__side-item">${title}${time}${bullets}</div>`;
+    })
+    .join('');
+  return `<section class="rp-editorial__side-section"><h2 class="rp-editorial__side-title rp-editorial__side-title--lined">${escapeHtml(section.title)}</h2><div class="rp-editorial__side-items">${items}</div></section>`;
+}
+
+function buildEditorialGoldExportHtml(doc: ResumeDocument): string {
+  const b = doc.basics;
+  const sections = sortedSections(doc.sections);
+  const experience = sections.find((s) => s.type === 'experience');
+  const project = sections.find((s) => s.type === 'project');
+  const education = sections.find((s) => s.type === 'education');
+  const skill = sections.find((s) => s.type === 'skill');
+  const custom = sections.find((s) => s.type === 'custom');
+  const initial = escapeHtml(nameInitialChar(b.fullName.trim() || '（姓名）'));
+
+  const contacts = `<div class="rp-editorial__contacts">${b.email.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">✉</span>${escapeHtml(b.email)}</span>` : ''}${b.email.trim() && b.phone.trim() ? `<span class="rp-editorial__contact-sep">|</span>` : ''}${b.phone.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">☎</span>${escapeHtml(b.phone)}</span>` : ''}${(b.email.trim() || b.phone.trim()) && b.location.trim() ? `<span class="rp-editorial__contact-sep">|</span>` : ''}${b.location.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">⌖</span>${escapeHtml(b.location)}</span>` : ''}</div>`;
+
+  const summary = b.summary.trim()
+    ? `<div class="rp-editorial__summary-box"><div class="rp-editorial__summary-rule rp-editorial__summary-rule--l"></div><div class="rp-editorial__summary-rule rp-editorial__summary-rule--r"></div><p class="rp-editorial__summary rp-md">${md(b.summary)}</p></div>`
+    : '';
+
+  const skillHtml =
+    skill && skill.items.length > 0
+      ? `<section class="rp-editorial__skill-panel"><h2 class="rp-editorial__side-title">${escapeHtml(skill.title)}</h2><div class="rp-editorial__skill-items">${skill.items
+          .map((item) => {
+            const title = item.title.trim()
+              ? `<h4 class="rp-editorial__skill-group-title">${escapeHtml(item.title)}</h4>`
+              : '';
+            const tags = item.bullets
+              .map((bl) => `<span class="rp-editorial__skill-tag">${escapeHtml(bl)}</span>`)
+              .join('');
+            return `<div class="rp-editorial__skill-group">${title}<div class="rp-editorial__skill-tags">${tags}</div></div>`;
+          })
+          .join('')}</div></section>`
+      : '';
+
+  const colMain = `${experience && experience.items.length > 0 ? buildEditorialSectionTimeline(experience) : ''}${project && project.items.length > 0 ? buildEditorialSectionTimeline(project) : ''}`;
+  const colSide = `${skillHtml}${education && education.items.length > 0 ? buildEditorialSideSection(education) : ''}${custom && custom.items.length > 0 ? buildEditorialSideSection(custom) : ''}`;
+
+  const body = `<div id="resume-editorial" class="rp-editorial"><div class="rp-editorial__band"><div class="rp-editorial__band-pattern"></div><div class="rp-editorial__band-line rp-editorial__band-line--top"></div><div class="rp-editorial__band-line rp-editorial__band-line--bottom"></div></div><div class="rp-editorial__avatar-wrap"><div class="rp-editorial__avatar-ring-outer"></div><div class="rp-editorial__avatar-ring-inner"></div><div class="rp-editorial__avatar"><span class="rp-editorial__avatar-initial">${initial}</span></div></div><div class="rp-editorial__body"><header class="rp-editorial__header"><h1 class="rp-editorial__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-editorial__headline">${escapeHtml(b.headline)}</p>` : ''}${contacts}${summary}</header><div class="rp-editorial__divider"><span class="rp-editorial__divider-line"></span><span class="rp-editorial__divider-diamond"></span><span class="rp-editorial__divider-line"></span></div><div class="rp-editorial__cols"><div class="rp-editorial__col-main">${colMain}</div><div class="rp-editorial__col-side">${colSide}</div></div></div><div class="rp-editorial__footer"><span class="rp-editorial__footer-line"></span><span class="rp-editorial__footer-dot"></span><span class="rp-editorial__footer-line"></span></div></div>`;
+  return wrapExportHtml(rpRootClass(doc), body);
+}
+
 /** 生成与 `ResumePreview.vue` 同结构 HTML，供 headless PDF 使用。 */
 export function buildResumeExportHtml(doc: ResumeDocument): string {
-  if (doc.templateId === 'minimal-dual') {
-    return buildMinimalDualExportHtml(doc);
+  switch (doc.templateId) {
+    case 'minimal-dual':
+      return buildMinimalDualExportHtml(doc);
+    case 'executive-dark':
+      return buildExecutiveDarkExportHtml(doc);
+    case 'editorial-gold':
+      return buildEditorialGoldExportHtml(doc);
+    default:
+      return buildClassicExportHtml(doc);
   }
-  return buildClassicExportHtml(doc);
 }
