@@ -1,14 +1,60 @@
-import puppeteer, { type Page } from "puppeteer";
+import puppeteer, { type Browser, type Page } from 'puppeteer';
 
 import {
   buildMeasureExportHtml,
   buildPaginatedExportHtml,
   type ResumeExportParts,
-} from "./buildResumeExportHtml.js";
+} from './buildResumeExportHtml.js';
 import {
   RP_A4_WIDTH_PX,
   computePageLayoutFromTotalHeight,
-} from "./computeResumePageLayout.js";
+} from './computeResumePageLayout.js';
+
+const BLOCKED_FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
+
+function launchBrowser(): Promise<Browser> {
+  return puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--font-render-hinting=none',
+    ],
+  });
+}
+
+async function openExportPage(browser: Browser): Promise<Page> {
+  const page = await browser.newPage();
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const host = (() => {
+      try {
+        return new URL(req.url()).host;
+      } catch {
+        return '';
+      }
+    })();
+    if (BLOCKED_FONT_HOSTS.some((h) => host.includes(h))) {
+      void req.abort();
+      return;
+    }
+    void req.continue();
+  });
+  return page;
+}
+
+async function loadHtmlPage(page: Page, html: string): Promise<void> {
+  await page.setViewport({
+    width: RP_A4_WIDTH_PX,
+    height: 900,
+    deviceScaleFactor: 1,
+  });
+  await page.setContent(html, {
+    waitUntil: 'domcontentloaded',
+    timeout: 60_000,
+  });
+}
 
 async function measurePreviewTotalHeight(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -24,18 +70,12 @@ async function measurePreviewTotalHeight(page: Page): Promise<number> {
   });
 }
 
-async function printHtmlPage(page: Page, html: string): Promise<Buffer> {
-  await page.setViewport({
-    width: RP_A4_WIDTH_PX,
-    height: 900,
-    deviceScaleFactor: 1,
-  });
-  await page.setContent(html, { waitUntil: "load" });
-  await page.evaluate(() => document.fonts.ready);
+async function printLoadedPage(page: Page): Promise<Buffer> {
   const pdf = await page.pdf({
     printBackground: true,
     preferCSSPageSize: true,
-    margin: { top: "0", bottom: "0", left: "0", right: "0" },
+    scale: 1,
+    margin: { top: '0', bottom: '0', left: '0', right: '0' },
   });
   return Buffer.from(pdf);
 }
@@ -45,21 +85,29 @@ export async function renderResumeExportPartsToPdf(
   parts: ResumeExportParts,
 ): Promise<Buffer> {
   const measureHtml = buildMeasureExportHtml(parts);
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--font-render-hinting=none",
-    ],
-  });
+  const browser = await launchBrowser();
   try {
-    const page = await browser.newPage();
-    await printHtmlPage(page, measureHtml);
-    const totalHeight = await measurePreviewTotalHeight(page);
-    const layout = computePageLayoutFromTotalHeight(totalHeight);
-    const paginatedHtml = buildPaginatedExportHtml(parts, layout.pages);
-    return printHtmlPage(page, paginatedHtml);
+    const measurePage = await openExportPage(browser);
+    try {
+      await loadHtmlPage(measurePage, measureHtml);
+      const totalHeight = await measurePreviewTotalHeight(measurePage);
+      const layout = computePageLayoutFromTotalHeight(totalHeight);
+      const paginatedHtml = buildPaginatedExportHtml(parts, layout.pages);
+
+      const printPage = await openExportPage(browser);
+      try {
+        await loadHtmlPage(printPage, paginatedHtml);
+        return await printLoadedPage(printPage);
+      } finally {
+        if (!printPage.isClosed()) {
+          await printPage.close();
+        }
+      }
+    } finally {
+      if (!measurePage.isClosed()) {
+        await measurePage.close();
+      }
+    }
   } finally {
     await browser.close();
   }
@@ -67,17 +115,17 @@ export async function renderResumeExportPartsToPdf(
 
 /** @deprecated 请使用 {@link renderResumeExportPartsToPdf}，以与预览分页一致。 */
 export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--font-render-hinting=none",
-    ],
-  });
+  const browser = await launchBrowser();
   try {
-    const page = await browser.newPage();
-    return printHtmlPage(page, html);
+    const page = await openExportPage(browser);
+    try {
+      await loadHtmlPage(page, html);
+      return await printLoadedPage(page);
+    } finally {
+      if (!page.isClosed()) {
+        await page.close();
+      }
+    }
   } finally {
     await browser.close();
   }

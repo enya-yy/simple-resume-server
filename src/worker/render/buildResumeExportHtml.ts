@@ -10,22 +10,47 @@ import {
   type ResumeTemplateId,
 } from '../../contracts/index';
 
-import type { ResumePageViewport } from './computeResumePageLayout.js';
+import {
+  RP_A4_HEIGHT_PX,
+  RP_A4_WIDTH_PX,
+  RPP_PAGE_SAFE_MARGIN_PX,
+  type ResumePageViewport,
+} from './computeResumePageLayout.js';
 
+/** 595×842 CSS px ≈ A4 @72dpi，与预览一致；禁止 print 媒体把宽度改成 210mm（≈794px）导致缩放 */
 const PDF_EXPORT_STYLE = `
-@page { size: 595px ${595 * Math.SQRT2}px; margin: 0; }
+@page { size: ${RP_A4_WIDTH_PX}px ${RP_A4_HEIGHT_PX}px; margin: 0; }
 html, body { margin: 0; padding: 0; background: #fff; }
 .rpp-export-pages { display: flex; flex-direction: column; align-items: flex-start; }
-.rpp-page-frame { page-break-after: always; break-after: page; width: 595px; }
+.rpp-page-frame {
+  page-break-after: always;
+  break-after: page;
+  width: ${RP_A4_WIDTH_PX}px;
+  height: ${RP_A4_HEIGHT_PX}px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
 .rpp-page-frame:last-child { page-break-after: auto; break-after: auto; }
-.rpp-page-viewport { box-sizing: border-box; width: 595px; padding: 0; overflow: hidden; background: #fff; }
-.rpp-page-viewport--first { padding: 0 0 36px; }
-.rpp-page-viewport--middle { padding: 36px 0; }
-.rpp-page-viewport--last { padding: 36px 0 0; }
+.rpp-page-viewport {
+  box-sizing: border-box;
+  width: ${RP_A4_WIDTH_PX}px;
+  height: ${RP_A4_HEIGHT_PX}px;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+}
+.rpp-page-viewport--gap-top { padding-top: ${RPP_PAGE_SAFE_MARGIN_PX}px; box-sizing: border-box; }
 .rpp-page-clip { overflow: hidden; position: relative; }
-.rpp-page-shift { width: 595px; }
-.rp-root { box-shadow: none; border-radius: 0; width: 595px; min-height: 0; aspect-ratio: unset; height: auto; }
+.rpp-page-shift { width: ${RP_A4_WIDTH_PX}px; }
+.rp-root { box-shadow: none; border-radius: 0; width: ${RP_A4_WIDTH_PX}px; min-height: 0; aspect-ratio: unset; height: auto; }
+@media print {
+  .rp-root { width: ${RP_A4_WIDTH_PX}px !important; min-height: 0 !important; box-shadow: none; border-radius: 0; }
+}
 `;
+
+function exportPdfUsesGapTop(page: ResumePageViewport): boolean {
+  return page.role === 'middle' || page.role === 'last';
+}
 
 export type ResumeExportParts = {
   rootClass: string;
@@ -44,12 +69,29 @@ function loadResumePreviewCss(): string {
   ];
   for (const path of candidates) {
     if (existsSync(path)) {
-      return readFileSync(path, 'utf8');
+      return sanitizeExportCss(readFileSync(path, 'utf8'));
     }
   }
   throw new Error(
     `resume-preview.css not found (tried: ${candidates.join(', ')})`,
   );
+}
+
+/** PDF 渲染不走外网字体，避免 Puppeteer 在 fonts.googleapis 加载时崩溃。 */
+function sanitizeExportCss(css: string): string {
+  const stripped = css
+    .replace(/@import\s+url\([^)]+\)\s*;?/gi, '')
+    .replace(/@media\s+print\s*\{\s*\.rp-root\s*\{[\s\S]*?\}\s*\}/gi, '');
+  return `${stripped}
+.rp-root,
+.rp-root * {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+}
+.rp-root.rp-tpl-editorial-gold,
+.rp-root.rp-tpl-editorial-gold * {
+  font-family: "Songti SC", "Noto Serif SC", "PingFang SC", serif;
+}
+`;
 }
 
 function escapeHtml(s: string): string {
@@ -102,10 +144,10 @@ function pageFrameMarkup(
   templateBody: string,
   page: ResumePageViewport,
 ): string {
-  const roleClass = `rpp-page-viewport--${page.role}`;
+  const gapClass = exportPdfUsesGapTop(page) ? ' rpp-page-viewport--gap-top' : '';
   const root = resumePreviewRootMarkup(rootClass, templateBody);
   return `<div class="rpp-page-frame">
-<div class="rpp-page-viewport ${roleClass}" style="height:${page.viewportHeight}px">
+<div class="rpp-page-viewport${gapClass}">
 <div class="rpp-page-clip" style="height:${page.sliceHeight}px">
 <div class="rpp-page-shift" style="transform:translateY(${-page.offsetY}px)">
 ${root}
@@ -132,14 +174,8 @@ ${resumePreviewRootMarkup(rootClass, body)}
 </html>`;
 }
 
-export function buildPaginatedExportHtml(
-  parts: ResumeExportParts,
-  pages: ResumePageViewport[],
-): string {
+function wrapPageExportHtml(frameMarkup: string): string {
   const css = loadResumePreviewCss();
-  const frames = pages
-    .map((p) => pageFrameMarkup(parts.rootClass, parts.templateBody, p))
-    .join('');
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -150,11 +186,28 @@ ${PDF_EXPORT_STYLE}
 </style>
 </head>
 <body>
-<div class="rpp-export-pages">
-${frames}
-</div>
+${frameMarkup}
 </body>
 </html>`;
+}
+
+/** 单页 HTML，避免多页重复嵌入整份简历导致 Puppeteer 卡死。 */
+export function buildSinglePageExportHtml(
+  parts: ResumeExportParts,
+  page: ResumePageViewport,
+): string {
+  const frame = pageFrameMarkup(parts.rootClass, parts.templateBody, page);
+  return wrapPageExportHtml(frame);
+}
+
+export function buildPaginatedExportHtml(
+  parts: ResumeExportParts,
+  pages: ResumePageViewport[],
+): string {
+  const frames = pages
+    .map((p) => pageFrameMarkup(parts.rootClass, parts.templateBody, p))
+    .join('');
+  return wrapPageExportHtml(`<div class="rpp-export-pages">${frames}</div>`);
 }
 
 const DATE_RANGE_RE =

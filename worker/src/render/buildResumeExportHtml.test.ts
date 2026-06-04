@@ -146,9 +146,8 @@ describe("buildResumeExportHtml", () => {
     const parts = buildResumeExportParts(doc);
     const pages = hardCutPages(2000);
     const html = buildPaginatedExportHtml(parts, pages);
-    expect(html).toContain("rpp-page-viewport--first");
-    expect(html).toContain("rpp-page-viewport--last");
-    expect(html).toContain("padding: 0 0 36px");
+    expect(html).toContain("rpp-page-viewport--gap-top");
+    expect(html).not.toContain("padding: 36px 0");
     expect(html).not.toContain("margin: 10mm");
   });
 });
