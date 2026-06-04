@@ -16,6 +16,7 @@ describe('buildResumeAgentSystemPrompt', () => {
     const prompt = buildResumeAgentSystemPrompt();
     expect(prompt).toContain('教育经历 / 学历');
     expect(prompt).toContain('2014-2016年在山东大学读计算机的研究生');
+    expect(prompt).toContain('2007-2010年在山东省潍坊一中就读');
     expect(prompt).toContain('moduleType: education');
     expect(prompt).toContain('用户已给出学校/专业/就读时间时视为信息足够');
   });

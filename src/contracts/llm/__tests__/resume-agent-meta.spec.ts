@@ -91,7 +91,7 @@ describe('buildAgentReply', () => {
 });
 
 describe('resolveResumeAgentTurnMeta', () => {
-  it('prefers parsed meta over inference', () => {
+  it('reconciles chat_only meta when mutations were applied', () => {
     const parsed = parseResumeAgentTurnMeta({
       outcome: 'chat_only',
       intent: 'GENERAL_CHAT',
@@ -102,6 +102,7 @@ describe('resolveResumeAgentTurnMeta', () => {
       mutationCalls: [{ name: 'update_basics', arguments: { data: {} } }],
       uiActions: [],
     });
-    expect(resolved.outcome).toBe('chat_only');
+    expect(resolved.outcome).toBe('mutation_ok');
+    expect(resolved.intent).toBe(CHAT_INTENTS.EDIT_BASIC_INFO);
   });
 });

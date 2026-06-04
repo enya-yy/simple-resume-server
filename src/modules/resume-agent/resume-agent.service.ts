@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ResumeDocument, ResumeAgentChatTurn } from '../../contracts/index';
+import { CHAT_INTENTS } from '../../contracts/constants/chat-intents';
+import { tryInferEducationAddFromMessage } from '../../contracts/llm/resume-agent-education-fallback';
+import { TURN_OUTCOMES } from '../../contracts/llm/resume-agent-meta';
 import { LlmGatewayService } from '../../common/llm/llm-gateway.service';
 import type { ResumeAgentTurn } from '../../common/llm/resume-agent-response-parse';
 import {
@@ -38,7 +41,7 @@ export class ResumeAgentService {
       ? `${input.userMessage}\n请调用 report_turn_meta(outcome: system_ack)；message 正文留空；勿列举界面快捷按钮。`
       : input.userMessage;
 
-    const turn = await this.llmGateway.dispatchResumeAgent({
+    let turn = await this.llmGateway.dispatchResumeAgent({
       userMessage: userContent,
       resumeAgentContext: input.resumeAgentContext,
       chatHistory: input.chatHistory,
@@ -46,7 +49,33 @@ export class ResumeAgentService {
       requestId: input.requestId,
     });
 
-    if (turn.mutationCalls.length === 0) {
+    let mutationCalls = turn.mutationCalls;
+    if (mutationCalls.length === 0 && !input.isSystemEvent) {
+      const educationFallback = tryInferEducationAddFromMessage(
+        input.userMessage,
+      );
+      if (educationFallback) {
+        mutationCalls = [educationFallback];
+        turn = {
+          ...turn,
+          mutationCalls,
+          meta: {
+            outcome: TURN_OUTCOMES.MUTATION_OK,
+            intent: CHAT_INTENTS.CREATE_RESUME,
+            confidence: 0.85,
+          },
+        };
+        this.logger.log({
+          msg: 'resume_agent_education_fallback',
+          requestId: input.requestId,
+          sessionId: input.sessionId,
+          school:
+            (educationFallback.arguments.item as { title?: string })?.title,
+        });
+      }
+    }
+
+    if (mutationCalls.length === 0) {
       return {
         turn,
         document: input.document,
@@ -57,7 +86,7 @@ export class ResumeAgentService {
 
     const { document, results } = this.toolExecutor.executeAll(
       input.document,
-      turn.mutationCalls,
+      mutationCalls,
     );
 
     const documentChanged = results.some((r) => r.ok);

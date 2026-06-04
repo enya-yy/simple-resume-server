@@ -145,12 +145,24 @@ export function resolveResumeAgentTurnMeta(input: {
   uiActions: ResumeUiActionLike[];
   isSystemEvent?: boolean;
 }): ResumeAgentTurnMeta {
-  if (input.meta) return input.meta;
-  return inferResumeAgentTurnMeta({
+  const inferred = inferResumeAgentTurnMeta({
     mutationCalls: input.mutationCalls,
     uiActions: input.uiActions,
     isSystemEvent: input.isSystemEvent,
   });
+  if (!input.meta) return inferred;
+  if (
+    input.meta.outcome === TURN_OUTCOMES.CHAT_ONLY &&
+    input.mutationCalls.length > 0 &&
+    inferred.outcome !== TURN_OUTCOMES.CHAT_ONLY
+  ) {
+    return {
+      ...input.meta,
+      outcome: inferred.outcome,
+      intent: inferred.intent,
+    };
+  }
+  return input.meta;
 }
 
 function mutationLabels(calls: ResumeToolCall[]): string[] {

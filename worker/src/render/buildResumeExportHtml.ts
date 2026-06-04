@@ -87,13 +87,108 @@ ${body}
 </html>`;
 }
 
+const DATE_RANGE_RE =
+  /^(\d{4}[./-]\d{1,2}(?:\s*[-–—至]\s*(?:\d{4}[./-]\d{1,2}|至今))?|至今\s*[-–—至]\s*\d{4}[./-]\d{1,2}|\d{4}\s*[-–—至~]\s*(?:\d{4}|至今))/;
+
+function isDateRange(text: string): boolean {
+  return DATE_RANGE_RE.test(text.trim());
+}
+
+const FLAT_EDUCATION_TITLE_SEP = /\s*[·•|]\s*/;
+
+function parseLegacyFlatEducationTitle(title: string): {
+  school: string;
+  degree: string;
+  dateRange: string;
+} | null {
+  const trimmed = title.trim();
+  if (!trimmed || !FLAT_EDUCATION_TITLE_SEP.test(trimmed)) {
+    return null;
+  }
+  const parts = trimmed.split(FLAT_EDUCATION_TITLE_SEP).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+  let dateRange = '';
+  const last = parts[parts.length - 1]!;
+  if (isDateRange(last)) {
+    dateRange = parts.pop()!;
+  }
+  const school = parts.shift() ?? trimmed;
+  const degree = parts.join(' · ');
+  return { school, degree, dateRange };
+}
+
+function parseEducationEntry(item: ResumeSectionItem) {
+  const bullets = [...item.bullets];
+  let degree = bullets.shift()?.trim() ?? '';
+  let dateRange = '';
+  if (bullets.length > 0 && isDateRange(bullets[0]!)) {
+    dateRange = bullets.shift()!.trim();
+  }
+  return {
+    school: item.title.trim() || '（学校）',
+    degree,
+    dateRange,
+    extras: bullets,
+  };
+}
+
 function parseYearLeadEntry(item: ResumeSectionItem) {
   const bullets = [...item.bullets];
   let dateVal = '';
-  if (bullets.length > 0 && /^\d{4}/.test(bullets[0]!)) {
+  if (bullets.length > 0 && isDateRange(bullets[0]!)) {
+    dateVal = bullets.shift()!.trim();
+  } else if (bullets.length > 0 && /^\d{4}/.test(bullets[0]!)) {
     dateVal = bullets.shift()!.trim();
   }
   return { dateVal, bullets };
+}
+
+function parseMainSectionEntry(
+  sectionType: ResumeModule['type'],
+  item: ResumeSectionItem,
+) {
+  if (sectionType === 'education') {
+    const hasBullets = item.bullets.some((b) => b.trim().length > 0);
+    if (!hasBullets) {
+      const legacy = parseLegacyFlatEducationTitle(item.title);
+      if (legacy) {
+        return {
+          title: legacy.school || '（学校）',
+          dateVal: legacy.dateRange,
+          metaLines: legacy.degree ? [legacy.degree] : [],
+          bullets: [] as string[],
+        };
+      }
+      return {
+        title: item.title.trim() || '（学校）',
+        dateVal: '',
+        metaLines: [] as string[],
+        bullets: [] as string[],
+      };
+    }
+    const edu = parseEducationEntry(item);
+    return {
+      title: edu.school,
+      dateVal: edu.dateRange,
+      metaLines: edu.degree ? [edu.degree] : [],
+      bullets: edu.extras,
+    };
+  }
+  const e = parseYearLeadEntry(item);
+  return {
+    title: item.title.trim() || '（未命名条目）',
+    dateVal: e.dateVal,
+    metaLines: [] as string[],
+    bullets: e.bullets,
+  };
+}
+
+function mainItemMetaHtml(metaLines: string[], className: string): string {
+  return metaLines
+    .map((m) => `<p class="${className}">${escapeHtml(m)}</p>`)
+    .join('');
 }
 
 function sectionTypeEnLabel(type: ResumeModule['type']): string {
@@ -128,7 +223,7 @@ function buildClassicExportHtml(doc: ResumeDocument): string {
     .map((section) => {
       const items = section.items
         .map((item) => {
-          const e = parseYearLeadEntry(item);
+          const e = parseMainSectionEntry(section.type, item);
           const bullets = e.bullets.length
             ? `<ul class="rp-classic__bullet-list">${e.bullets
                 .map(
@@ -137,14 +232,14 @@ function buildClassicExportHtml(doc: ResumeDocument): string {
                 )
                 .join('')}</ul>`
             : '';
-          return `<div class="rp-classic__item"><div class="rp-classic__item-head"><h3 class="rp-classic__item-title">${escapeHtml(item.title)}</h3>${e.dateVal ? `<span class="rp-classic__item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
+          const meta = mainItemMetaHtml(e.metaLines, 'rp-classic__item-meta');
+          return `<div class="rp-classic__item"><div class="rp-classic__item-head"><div class="rp-classic__item-head-main"><h3 class="rp-classic__item-title">${escapeHtml(e.title)}</h3>${meta}</div>${e.dateVal ? `<span class="rp-classic__item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
         })
         .join('');
       return `<section class="rp-classic__section"><h2 class="rp-classic__section-title"><span>${escapeHtml(section.title)}</span><span class="rp-classic__section-en">${sectionTypeEnLabel(section.type)}</span></h2><div class="rp-classic__items">${items}</div></section>`;
     })
     .join('');
-  const footer = `<footer class="rp-classic__footer"><span>核验码: RE-2026-639A4 | 林晓晨-中文简历</span><span class="rp-classic__footer-badge">✓ 经一键脱敏排版印制</span></footer>`;
-  const body = `<div id="resume-classic" class="rp-classic">${header}${summary}<div class="rp-classic__sections">${sectionsHtml}</div>${footer}</div>`;
+  const body = `<div id="resume-classic" class="rp-classic">${header}${summary}<div class="rp-classic__sections">${sectionsHtml}</div></div>`;
   return wrapExportHtml(rpRootClass(doc), body);
 }
 
@@ -199,7 +294,7 @@ function buildMinimalDualExportHtml(doc: ResumeDocument): string {
       const suffix = section.id.split('-')[1]?.toUpperCase() ?? '';
       const items = section.items
         .map((item) => {
-          const e = parseYearLeadEntry(item);
+          const e = parseMainSectionEntry(section.type, item);
           const bullets = e.bullets.length
             ? `<ul class="rp-modern__bullet-list">${e.bullets
                 .map(
@@ -208,15 +303,15 @@ function buildMinimalDualExportHtml(doc: ResumeDocument): string {
                 )
                 .join('')}</ul>`
             : '';
-          return `<div class="rp-modern__main-item"><div class="rp-modern__main-item-head"><h3 class="rp-modern__main-item-title">${escapeHtml(item.title)}</h3>${e.dateVal ? `<span class="rp-modern__main-item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
+          const meta = mainItemMetaHtml(e.metaLines, 'rp-modern__main-item-meta');
+          return `<div class="rp-modern__main-item"><div class="rp-modern__main-item-head"><div class="rp-modern__main-item-head-main"><h3 class="rp-modern__main-item-title">${escapeHtml(e.title)}</h3>${meta}</div>${e.dateVal ? `<span class="rp-modern__main-item-date">${escapeHtml(e.dateVal)}</span>` : ''}</div>${bullets}</div>`;
         })
         .join('');
       return `<section class="rp-modern__main-section"><h2 class="rp-modern__main-title"><span class="rp-modern__main-title-left"><span class="rp-modern__main-icon">${icon}</span><span>${escapeHtml(section.title)}</span></span><span class="rp-modern__main-title-suffix">${escapeHtml(suffix)}</span></h2><div class="rp-modern__main-items">${items}</div></section>`;
     })
     .join('');
 
-  const footer = `<footer class="rp-modern__footer"><span>SECURITY LEVEL: NORMAL / DATA SHIELD MASKING ENABLED</span><span>林晓晨 · iOS/Vue/TypeScript 开发者简历</span></footer>`;
-  const body = `<div id="resume-modern" class="rp-modern"><div class="rp-modern__accent"></div><div class="rp-modern__grid"><aside class="rp-modern__sidebar">${identity}${contacts}${sidebarHtml}</aside><div class="rp-modern__main">${summary}${mainHtml}</div></div>${footer}</div>`;
+  const body = `<div id="resume-modern" class="rp-modern"><div class="rp-modern__accent"></div><div class="rp-modern__grid"><aside class="rp-modern__sidebar">${identity}${contacts}${sidebarHtml}</aside><div class="rp-modern__main">${summary}${mainHtml}</div></div></div>`;
   return wrapExportHtml(rpRootClass(doc), body);
 }
 

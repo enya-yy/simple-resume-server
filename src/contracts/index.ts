@@ -47,5 +47,6 @@ export * from './llm/chat-followup-phrases';
 export * from './llm/form-card-lead-in';
 export * from './llm/import-success-messages';
 export * from './llm/resume-agent-meta';
+export * from './llm/resume-agent-education-fallback';
 export * from './llm/chat-history-for-agent';
 export * from './markdown/resumeMarkdown';

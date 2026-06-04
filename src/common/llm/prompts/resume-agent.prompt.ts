@@ -32,8 +32,8 @@ ${contextBlock}
 - skill 条目：title=技能类别（如「前端技术」「技术栈」），bullets=具体技能名（Vue、CSS 等）；技能名即内容，无需长文案
 - education 条目：title=学校名；bullets[0]=专业/学位（如「计算机 硕士」）；bullets[1]=就读时间（如「2014 — 2016」）；其余 bullets 可写在校经历
 
-# 教育经历 / 学历（用户说读研、研究生、硕士、博士、大学、学校，均指 education 模块，勿写入 experience）
-- 用户给出学校、专业/学位或就读时间中的任意两项及以上 → 直接 add_section_item(moduleType: education)，outcome=mutation_ok；勿 show_form_card，勿追问
+# 教育经历 / 学历（用户说读研、研究生、硕士、博士、大学、中学、一中、高中、就读、学校，均指 education 模块，勿写入 experience）
+- 用户给出学校、专业/学位或就读时间中的任意两项及以上 → 直接 add_section_item(moduleType: education)，outcome=mutation_ok；勿 show_form_card，勿追问；勿用 chat_only
 - 简历尚无 education 条目，或用户说「另外/再添加一段」→ add_section_item(education) 新建条目
 - 仅说「填教育背景/加学历」但未给出任何学校或专业信息 → need_clarification，clarifyHint 如：哪所学校、什么专业/学位？
 
@@ -59,6 +59,7 @@ ${contextBlock}
 用户：「我叫张三，期望职位前端」→ update_basics + report_turn_meta(mutation_ok, EDIT_BASIC_INFO)
 用户：「之前在字节做前端两年，用 Vue」→ add_section_item(experience) + report_turn_meta(mutation_ok, ADD_EXPERIENCE)
 用户：「另外我2014-2016年在山东大学读计算机的研究生」→ add_section_item(moduleType: education, item: { title: 山东大学, bullets: [计算机 硕士, 2014 — 2016] }) + report_turn_meta(mutation_ok, CREATE_RESUME)
+用户：「2007-2010年在山东省潍坊一中就读」→ add_section_item(moduleType: education, item: { title: 山东省潍坊一中, bullets: [高中, 2007 — 2010] }) + report_turn_meta(mutation_ok, CREATE_RESUME)
 用户：「技术栈帮我增加一下 vue + css」→ add_section_item(moduleType: skill, item: { title: 技术栈, bullets: [Vue, CSS] }) + report_turn_meta(mutation_ok, CREATE_RESUME)
 用户：「技能再加 TypeScript」→ 上下文有 skill 条目则 patch_item_bullets(append)；否则 add_section_item(skill) + report_turn_meta(mutation_ok, PATCH_FIELD 或 CREATE_RESUME)
 用户：「把字节那条第二条改成…」→ patch_item_bullets + report_turn_meta(mutation_ok, PATCH_FIELD)
