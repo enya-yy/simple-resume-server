@@ -152,11 +152,15 @@ jobs:
           mkdir -p "$PUPPETEER_CACHE_DIR"
           upsert_env PUPPETEER_CACHE_DIR "$PUPPETEER_CACHE_DIR"
 
-          resolve_chromium_path() {
+          PUPPETEER_MIRROR="https://cdn.npmmirror.com/binaries/chrome-for-testing"
+
+          resolve_chrome_path() {
             for candidate in \
               /usr/bin/chromium \
               /usr/bin/chromium-browser \
-              /snap/bin/chromium; do
+              /snap/bin/chromium \
+              /usr/bin/google-chrome-stable \
+              /usr/bin/google-chrome; do
               if [ -x "$candidate" ]; then
                 echo "$candidate"
                 return 0
@@ -165,37 +169,53 @@ jobs:
             return 1
           }
 
+          puppeteer_cache_has_chrome() {
+            find "$PUPPETEER_CACHE_DIR" -type f \( -name chrome -o -name chrome-headless-shell \) -perm -111 2>/dev/null | grep -q .
+          }
+
+          apt_chromium_is_snap_transitional() {
+            # Ubuntu 22.04+ 的 chromium-browser 是 snap 过渡包，非交互 SSH 里 apt 会卡死。
+            apt-cache show chromium-browser >/dev/null 2>&1 \
+              && apt-cache depends chromium-browser 2>/dev/null | grep -q 'snap:'
+          }
+
           ensure_puppeteer_chrome() {
-            # 国内测试机从 storage.googleapis.com 拉 Chrome 经常卡死；优先用 apt 系统 Chromium。
-            local chromium_path=""
-            if chromium_path="$(resolve_chromium_path)"; then
-              echo "[deploy] using system Chromium at $chromium_path"
-              upsert_env PUPPETEER_EXECUTABLE_PATH "$chromium_path"
+            local chrome_path=""
+
+            if chrome_path="$(resolve_chrome_path)"; then
+              echo "[deploy] using system Chrome/Chromium at $chrome_path"
+              upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
+              return 0
+            fi
+
+            if puppeteer_cache_has_chrome; then
+              echo "[deploy] Puppeteer Chrome already cached at $PUPPETEER_CACHE_DIR"
+              return 0
+            fi
+
+            # 国内测试机：Google CDN 慢；apt chromium-browser 在 Ubuntu 上会走 snap 同样会挂。
+            echo "[deploy] installing Puppeteer Chrome via npmmirror (timeout 600s)"
+            if timeout 600 env \
+              PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
+              PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
+              PUPPETEER_CHROME_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
+              pnpm_cmd exec puppeteer browsers install chrome; then
+              echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
               return 0
             fi
 
             if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-              echo "[deploy] installing system Chromium via apt"
-              sudo -n apt-get update -qq || true
-              if ! sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-                chromium-browser \
-                >/dev/null 2>&1; then
-                sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-                  chromium \
-                  >/dev/null 2>&1 || true
+              if apt_chromium_is_snap_transitional; then
+                echo "[deploy] skipping apt chromium-browser (snap transitional package)"
+              elif apt-cache show chromium >/dev/null 2>&1; then
+                echo "[deploy] trying apt chromium deb (timeout 180s)"
+                timeout 180 sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends chromium || true
               fi
             fi
 
-            if chromium_path="$(resolve_chromium_path)"; then
-              echo "[deploy] using system Chromium at $chromium_path"
-              upsert_env PUPPETEER_EXECUTABLE_PATH "$chromium_path"
-              return 0
-            fi
-
-            echo "[deploy] system Chromium unavailable; trying puppeteer cache (10 min timeout)"
-            if timeout 600 env PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
-              pnpm_cmd exec puppeteer browsers install chrome; then
-              echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
+            if chrome_path="$(resolve_chrome_path)"; then
+              echo "[deploy] using system Chrome/Chromium at $chrome_path"
+              upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
               return 0
             fi
 
