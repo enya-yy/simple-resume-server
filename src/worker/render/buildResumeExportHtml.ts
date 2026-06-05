@@ -84,13 +84,25 @@ function sanitizeExportCss(css: string): string {
     .replace(/@import\s+url\([^)]+\)\s*;?/gi, '')
     .replace(/@media\s+print\s*\{\s*\.rp-root\s*\{[\s\S]*?\}\s*\}/gi, '');
   return `${stripped}
+@font-face {
+  font-family: "Noto Sans SC";
+  src: local("Noto Sans CJK SC"), local("Noto Sans SC");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Serif SC";
+  src: local("Noto Serif CJK SC"), local("Noto Serif SC");
+  font-weight: 100 900;
+  font-display: swap;
+}
 .rp-root,
 .rp-root * {
-  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  font-family: "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 .rp-root.rp-tpl-editorial-gold,
 .rp-root.rp-tpl-editorial-gold * {
-  font-family: "Songti SC", "Noto Serif SC", "PingFang SC", serif;
+  font-family: "Noto Serif CJK SC", "Noto Serif SC", "Songti SC", "Noto Sans CJK SC", serif;
 }
 `;
 }

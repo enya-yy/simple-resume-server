@@ -26,8 +26,6 @@ import {
   completeOpenAiChatCompletion,
   completeOpenAiVisionChatCompletion,
 } from '../openai-chat-completion';
-import { PDF_TEXT_MIN_CHARS } from './import-constants';
-
 export interface ImportLlmResolved extends ChatAssistLlmResolved {
   visionModel: string;
 }
@@ -192,8 +190,8 @@ export async function runImportLlmPipeline(params: {
   }
 
   let text = params.extractedText.trim();
-  const needsOcr =
-    params.imageBuffers.length > 0 && text.length < PDF_TEXT_MIN_CHARS;
+  // imageBuffers 仅在扫描版或 pdf-parse 乱码时由 extractResumeText 注入，此时一律走 OCR。
+  const needsOcr = params.imageBuffers.length > 0;
 
   if (needsOcr) {
     const vision = resolveImportVisionCreds(process.env);

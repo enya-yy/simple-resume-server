@@ -51,6 +51,7 @@ export function isDocxMime(mime: string | null | undefined): boolean {
 }
 
 import { PDF_TEXT_MIN_CHARS, IMPORT_MAX_OCR_PAGES } from '../../common/llm/import/import-constants';
+import { isPdfExtractedTextGarbled } from './pdf-text-quality';
 
 export async function extractTextFromPdfBuffer(
   buffer: Buffer,
@@ -61,9 +62,11 @@ export async function extractTextFromPdfBuffer(
   ) => Promise<{ text: string }>;
   const result = await pdfParse(buffer);
   const text = (result.text ?? '').replace(/\s+/g, ' ').trim();
+  const needsVisionFallback =
+    text.length < PDF_TEXT_MIN_CHARS || isPdfExtractedTextGarbled(text);
   return {
     text,
-    needsVisionFallback: text.length < PDF_TEXT_MIN_CHARS,
+    needsVisionFallback,
   };
 }
 
