@@ -115,6 +115,8 @@ jobs:
 
           export NODE_ENV=production
           export SQLITE_DATABASE_PATH="$TEST_SQLITE_DATABASE_PATH"
+          # 避免 pnpm install/rebuild 时从 Google CDN 拉 Chrome 卡死；由 ensure_puppeteer_chrome 提供浏览器。
+          export PUPPETEER_SKIP_DOWNLOAD=true
           # 测试机走 HTTP：session 须可写入非 Secure cookie，否则 CSRF / 登录恒为 403
           export SESSION_COOKIE_SECURE=false
           export TRUST_PROXY=true
@@ -149,6 +151,57 @@ jobs:
           PUPPETEER_CACHE_DIR="$TEST_SERVER_DIR/worker/.cache/puppeteer"
           mkdir -p "$PUPPETEER_CACHE_DIR"
           upsert_env PUPPETEER_CACHE_DIR "$PUPPETEER_CACHE_DIR"
+
+          resolve_chromium_path() {
+            for candidate in \
+              /usr/bin/chromium \
+              /usr/bin/chromium-browser \
+              /snap/bin/chromium; do
+              if [ -x "$candidate" ]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ensure_puppeteer_chrome() {
+            # 国内测试机从 storage.googleapis.com 拉 Chrome 经常卡死；优先用 apt 系统 Chromium。
+            local chromium_path=""
+            if chromium_path="$(resolve_chromium_path)"; then
+              echo "[deploy] using system Chromium at $chromium_path"
+              upsert_env PUPPETEER_EXECUTABLE_PATH "$chromium_path"
+              return 0
+            fi
+
+            if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              echo "[deploy] installing system Chromium via apt"
+              sudo -n apt-get update -qq || true
+              if ! sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                chromium-browser \
+                >/dev/null 2>&1; then
+                sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                  chromium \
+                  >/dev/null 2>&1 || true
+              fi
+            fi
+
+            if chromium_path="$(resolve_chromium_path)"; then
+              echo "[deploy] using system Chromium at $chromium_path"
+              upsert_env PUPPETEER_EXECUTABLE_PATH "$chromium_path"
+              return 0
+            fi
+
+            echo "[deploy] system Chromium unavailable; trying puppeteer cache (10 min timeout)"
+            if timeout 600 env PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
+              pnpm_cmd exec puppeteer browsers install chrome; then
+              echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
+              return 0
+            fi
+
+            echo "[deploy] ERROR: no Chromium binary available for PDF export"
+            return 1
+          }
 
           # Puppeteer PDF 导出：Chrome 运行时依赖（缺库时 launch 会失败）
           if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
@@ -199,11 +252,14 @@ jobs:
           trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 
           cd "$TEST_SERVER_DIR"
+          echo "[deploy] step: sqlite-pg install/build"
           pnpm_cmd --dir packages/sqlite-pg install --frozen-lockfile
           pnpm_cmd --dir packages/sqlite-pg rebuild --pending
           pnpm_cmd --dir packages/sqlite-pg build
+          echo "[deploy] step: api install"
           pnpm_cmd install --frozen-lockfile
           pnpm_cmd rebuild --pending
+          echo "[deploy] step: worker install"
           pnpm_cmd --dir worker install --frozen-lockfile
           pnpm_cmd --dir worker rebuild --pending
           node -r ./scripts/load-sqlite-env.cjs <<'NODE'
@@ -216,13 +272,18 @@ jobs:
           mkdirSync(dirname(sqlitePath), { recursive: true });
           console.log(`[deploy] SQLite database path: ${sqlitePath}`);
           NODE
+          echo "[deploy] step: api build"
           pnpm_cmd build
+          echo "[deploy] step: sqlite migrate"
           pnpm_cmd migrate
 
           cd "$TEST_SERVER_DIR/worker"
+          echo "[deploy] step: worker build"
           pnpm_cmd build
-          PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" pnpm_cmd exec puppeteer browsers install chrome
+          echo "[deploy] step: ensure Chromium for PDF export"
+          ensure_puppeteer_chrome
 
+          echo "[deploy] step: pm2 reload"
           pm2_reload_or_start "$TEST_PM2_API_NAME" "$TEST_SERVER_DIR" "dist/main.js"
           pm2_reload_or_start "$TEST_PM2_WORKER_NAME" "$TEST_SERVER_DIR/worker" "dist/main.js"
           REMOTE_SCRIPT
