@@ -146,6 +146,23 @@ jobs:
           fi
           upsert_env EXPORT_LOCAL_DIR "$TEST_EXPORT_LOCAL_DIR"
 
+          PUPPETEER_CACHE_DIR="$TEST_SERVER_DIR/worker/.cache/puppeteer"
+          mkdir -p "$PUPPETEER_CACHE_DIR"
+          upsert_env PUPPETEER_CACHE_DIR "$PUPPETEER_CACHE_DIR"
+
+          # Puppeteer PDF 导出：Chrome 运行时依赖（缺库时 launch 会失败）
+          if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            sudo -n apt-get update -qq || true
+            sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+              ca-certificates fonts-liberation fonts-noto-cjk \
+              libasound2 libatk-bridge2.0-0 libatk1.0-0 libc6 libcairo2 libcups2 \
+              libdbus-1-3 libexpat1 libfontconfig1 libgbm1 libglib2.0-0 libgtk-3-0 \
+              libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libx11-6 libx11-xcb1 \
+              libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
+              libxrandr2 libxrender1 libxss1 libxtst6 \
+              >/dev/null 2>&1 || true
+          fi
+
           pnpm_cmd() {
             corepack pnpm@10.33.0 "$@"
           }
@@ -204,6 +221,7 @@ jobs:
 
           cd "$TEST_SERVER_DIR/worker"
           pnpm_cmd build
+          PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" pnpm_cmd exec puppeteer browsers install chrome
 
           pm2_reload_or_start "$TEST_PM2_API_NAME" "$TEST_SERVER_DIR" "dist/main.js"
           pm2_reload_or_start "$TEST_PM2_WORKER_NAME" "$TEST_SERVER_DIR/worker" "dist/main.js"

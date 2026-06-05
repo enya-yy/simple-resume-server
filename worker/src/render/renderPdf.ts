@@ -12,15 +12,27 @@ import {
 
 const BLOCKED_FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
+const PUPPETEER_LAUNCH_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--font-render-hinting=none',
+];
+
+function resolveChromeExecutablePath(): string {
+  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return puppeteer.executablePath();
+}
+
 function launchBrowser(): Promise<Browser> {
   return puppeteer.launch({
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--font-render-hinting=none',
-    ],
+    executablePath: resolveChromeExecutablePath(),
+    args: PUPPETEER_LAUNCH_ARGS,
   });
 }
 

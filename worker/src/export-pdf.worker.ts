@@ -108,7 +108,11 @@ export async function runExportJobStep(
       parsed = resumeDocumentSchema.parse(row.document_json);
     } catch (e) {
       if (e instanceof ZodError) {
-        console.error("[worker] document_json invalid", exportJobId, e.message);
+        console.error(
+          "[worker] document_json invalid",
+          exportJobId,
+          e.flatten(),
+        );
       }
       await markExportFailed(
         pool,
@@ -156,7 +160,7 @@ export async function runExportJobStep(
         [exportJobId, objectKey, sizeBytes],
       );
     } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
+      const detail = e instanceof Error ? e.stack ?? e.message : String(e);
       console.error("[worker] PDF render failed", exportJobId, detail);
       await markExportFailed(
         pool,

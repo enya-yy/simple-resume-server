@@ -66,9 +66,10 @@ function monorepoRoot(): string {
 
 function loadResumePreviewCss(): string {
   const candidates = [
-    join(monorepoRoot(), 'web/src/styles/resume-preview.css'),
+    // 测试机只部署 server/，优先 worker 构建产物与源码副本
     join(renderDir, 'resume-preview.css'),
     join(renderDir, '../../../src/worker/render/resume-preview.css'),
+    join(monorepoRoot(), 'web/src/styles/resume-preview.css'),
   ];
   for (const path of candidates) {
     if (existsSync(path)) {
