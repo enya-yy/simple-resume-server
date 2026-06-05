@@ -284,6 +284,36 @@ jobs:
             corepack pnpm@10.33.0 "$@"
           }
 
+          install_native_build_deps() {
+            if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              echo "[deploy] installing native module build deps"
+              sudo -n apt-get update -qq || true
+              sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                build-essential python3 pkg-config libsqlite3-dev \
+                >/dev/null 2>&1 || true
+            fi
+          }
+
+          rebuild_better_sqlite3() {
+            local dir="${1:-}"
+            if [ -n "$dir" ]; then
+              echo "[deploy] rebuilding better-sqlite3 in $dir"
+              pnpm_cmd --dir "$dir" rebuild better-sqlite3
+            else
+              echo "[deploy] rebuilding better-sqlite3 in server root"
+              pnpm_cmd rebuild better-sqlite3
+            fi
+          }
+
+          verify_better_sqlite3() {
+            local dir="$1"
+            echo "[deploy] verifying better-sqlite3 in $dir"
+            pnpm_cmd --dir "$dir" exec node --input-type=module -e "
+              import 'better-sqlite3';
+              console.log('[deploy] better-sqlite3 ok in $dir');
+            "
+          }
+
           pm2_reload_or_start() {
             local name="$1"
             local cwd="$2"
@@ -316,16 +346,22 @@ jobs:
           trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 
           cd "$TEST_SERVER_DIR"
+          echo "[deploy] step: native build deps"
+          install_native_build_deps
           echo "[deploy] step: sqlite-pg install/build"
           pnpm_cmd --dir packages/sqlite-pg install --frozen-lockfile
           pnpm_cmd --dir packages/sqlite-pg rebuild --pending
+          rebuild_better_sqlite3 packages/sqlite-pg
           pnpm_cmd --dir packages/sqlite-pg build
           echo "[deploy] step: api install"
           pnpm_cmd install --frozen-lockfile
           pnpm_cmd rebuild --pending
+          rebuild_better_sqlite3
           echo "[deploy] step: worker install"
           pnpm_cmd --dir worker install --frozen-lockfile
           pnpm_cmd --dir worker rebuild --pending
+          rebuild_better_sqlite3 worker
+          verify_better_sqlite3 worker
           node -r ./scripts/load-sqlite-env.cjs <<'NODE'
           const { mkdirSync } = require('node:fs');
           const { dirname, resolve } = require('node:path');
