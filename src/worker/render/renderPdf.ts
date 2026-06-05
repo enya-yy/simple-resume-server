@@ -1,3 +1,5 @@
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
+
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 
 import {
@@ -20,20 +22,73 @@ const PUPPETEER_LAUNCH_ARGS = [
   '--font-render-hinting=none',
 ];
 
-function resolveChromeExecutablePath(): string {
-  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
-  if (fromEnv) {
-    return fromEnv;
+function isUsableChromeBinary(path: string): boolean {
+  if (!path || !existsSync(path)) return false;
+  try {
+    accessSync(path, constants.X_OK);
+  } catch {
+    return false;
   }
-  return puppeteer.executablePath();
+  try {
+    const head = readFileSync(path, { encoding: 'utf8' }).slice(0, 256);
+    // Ubuntu chromium-browser 常为 snap 包装脚本，Puppeteer 无法直接启动。
+    if (head.startsWith('#!')) return false;
+  } catch {
+    return false;
+  }
+  return true;
 }
 
-function launchBrowser(): Promise<Browser> {
-  return puppeteer.launch({
-    headless: true,
-    executablePath: resolveChromeExecutablePath(),
-    args: PUPPETEER_LAUNCH_ARGS,
-  });
+function resolveChromeExecutablePath(): string {
+  const candidates: string[] = [];
+  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (fromEnv) candidates.push(fromEnv);
+
+  try {
+    const bundled = puppeteer.executablePath();
+    if (bundled) candidates.push(bundled);
+  } catch {
+    // puppeteer cache may be empty
+  }
+
+  for (const system of [
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/snap/bin/chromium',
+  ]) {
+    candidates.push(system);
+  }
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (isUsableChromeBinary(candidate)) return candidate;
+  }
+
+  throw new Error(
+    `No usable Chrome/Chromium binary found (tried: ${[...seen].join(', ')}). ` +
+      'Run puppeteer browsers install chrome or set PUPPETEER_EXECUTABLE_PATH.',
+  );
+}
+
+async function launchBrowser(): Promise<Browser> {
+  const executablePath = resolveChromeExecutablePath();
+  try {
+    return await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: PUPPETEER_LAUNCH_ARGS,
+      timeout: 60_000,
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Puppeteer launch failed (executable: ${executablePath}): ${detail}`,
+      { cause: err },
+    );
+  }
 }
 
 async function openExportPage(browser: Browser): Promise<Page> {

@@ -132,6 +132,12 @@ jobs:
               echo "${key}=${val}" >> "$ENV_FILE"
             fi
           }
+          remove_env() {
+            local key="$1"
+            if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+              sed -i "/^${key}=/d" "$ENV_FILE"
+            fi
+          }
           upsert_env SESSION_COOKIE_SECURE false
           upsert_env TRUST_PROXY true
 
@@ -154,14 +160,23 @@ jobs:
 
           PUPPETEER_MIRROR="https://cdn.npmmirror.com/binaries/chrome-for-testing"
 
+          chrome_is_usable_binary() {
+            local candidate="$1"
+            [ -x "$candidate" ] || return 1
+            # snap 过渡包会留下 shell 包装脚本，Puppeteer 无法直接启动。
+            if head -c 2 "$candidate" 2>/dev/null | grep -q '^#!'; then
+              return 1
+            fi
+            return 0
+          }
+
           resolve_chrome_path() {
             for candidate in \
-              /usr/bin/chromium \
-              /usr/bin/chromium-browser \
-              /snap/bin/chromium \
               /usr/bin/google-chrome-stable \
-              /usr/bin/google-chrome; do
-              if [ -x "$candidate" ]; then
+              /usr/bin/google-chrome \
+              /usr/bin/chromium \
+              /snap/bin/chromium; do
+              if chrome_is_usable_binary "$candidate"; then
                 echo "$candidate"
                 return 0
               fi
@@ -173,6 +188,30 @@ jobs:
             find "$PUPPETEER_CACHE_DIR" -type f \( -name chrome -o -name chrome-headless-shell \) -perm -111 2>/dev/null | grep -q .
           }
 
+          verify_chrome_launch() {
+            local exec_path=""
+            if grep -q '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" 2>/dev/null; then
+              exec_path="$(grep '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" | tail -1 | cut -d= -f2-)"
+            fi
+            echo "[deploy] verifying Chrome launch (timeout 45s)"
+            if timeout 45 env PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" PUPPETEER_EXECUTABLE_PATH="$exec_path" \
+              pnpm_cmd --dir worker exec node --input-type=module -e "
+              import puppeteer from 'puppeteer';
+              const path = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || puppeteer.executablePath();
+              const browser = await puppeteer.launch({
+                headless: true,
+                executablePath: path,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+                timeout: 30000,
+              });
+              await browser.close();
+              console.log('[deploy] Chrome launch ok:', path);
+            "; then
+              return 0
+            fi
+            return 1
+          }
+
           apt_chromium_is_snap_transitional() {
             # Ubuntu 22.04+ 的 chromium-browser 是 snap 过渡包，非交互 SSH 里 apt 会卡死。
             apt-cache show chromium-browser >/dev/null 2>&1 \
@@ -182,26 +221,28 @@ jobs:
           ensure_puppeteer_chrome() {
             local chrome_path=""
 
-            if chrome_path="$(resolve_chrome_path)"; then
-              echo "[deploy] using system Chrome/Chromium at $chrome_path"
-              upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
-              return 0
-            fi
-
+            # 优先 Puppeteer 缓存（Chrome for Testing），避免 Ubuntu snap 包装脚本。
             if puppeteer_cache_has_chrome; then
               echo "[deploy] Puppeteer Chrome already cached at $PUPPETEER_CACHE_DIR"
-              return 0
+              remove_env PUPPETEER_EXECUTABLE_PATH
+              if verify_chrome_launch; then
+                return 0
+              fi
+              echo "[deploy] cached Chrome failed launch check; reinstalling"
             fi
 
-            # 国内测试机：Google CDN 慢；apt chromium-browser 在 Ubuntu 上会走 snap 同样会挂。
             echo "[deploy] installing Puppeteer Chrome via npmmirror (timeout 600s)"
             if timeout 600 env \
               PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
               PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
               PUPPETEER_CHROME_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
-              pnpm_cmd exec puppeteer browsers install chrome; then
+              pnpm_cmd --dir worker exec puppeteer browsers install chrome; then
               echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
-              return 0
+              remove_env PUPPETEER_EXECUTABLE_PATH
+              if verify_chrome_launch; then
+                return 0
+              fi
+              echo "[deploy] npmmirror Chrome failed launch check; trying system Chromium"
             fi
 
             if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
@@ -216,7 +257,10 @@ jobs:
             if chrome_path="$(resolve_chrome_path)"; then
               echo "[deploy] using system Chrome/Chromium at $chrome_path"
               upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
-              return 0
+              if verify_chrome_launch; then
+                return 0
+              fi
+              echo "[deploy] system Chromium failed launch check"
             fi
 
             echo "[deploy] ERROR: no Chromium binary available for PDF export"
