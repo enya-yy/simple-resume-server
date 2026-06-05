@@ -121,6 +121,9 @@ async function loadHtmlPage(page: Page, html: string): Promise<void> {
     waitUntil: 'domcontentloaded',
     timeout: 60_000,
   });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
 }
 
 async function measurePreviewTotalHeight(page: Page): Promise<number> {

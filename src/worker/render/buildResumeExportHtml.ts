@@ -16,6 +16,7 @@ import {
   RPP_PAGE_SAFE_MARGIN_PX,
   type ResumePageViewport,
 } from './computeResumePageLayout.js';
+import { buildExportFontFaceCss } from './exportFontFaceCss';
 
 /** 595×842 CSS px ≈ A4 @72dpi，与预览一致；禁止 print 媒体把宽度改成 210mm（≈794px）导致缩放 */
 const PDF_EXPORT_STYLE = `
@@ -83,28 +84,8 @@ function sanitizeExportCss(css: string): string {
   const stripped = css
     .replace(/@import\s+url\([^)]+\)\s*;?/gi, '')
     .replace(/@media\s+print\s*\{\s*\.rp-root\s*\{[\s\S]*?\}\s*\}/gi, '');
-  return `${stripped}
-@font-face {
-  font-family: "Noto Sans SC";
-  src: local("Noto Sans CJK SC"), local("Noto Sans SC");
-  font-weight: 100 900;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Noto Serif SC";
-  src: local("Noto Serif CJK SC"), local("Noto Serif SC");
-  font-weight: 100 900;
-  font-display: swap;
-}
-.rp-root,
-.rp-root * {
-  font-family: "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-.rp-root.rp-tpl-editorial-gold,
-.rp-root.rp-tpl-editorial-gold * {
-  font-family: "Noto Serif CJK SC", "Noto Serif SC", "Songti SC", "Noto Sans CJK SC", serif;
-}
-`;
+  const fontCss = buildExportFontFaceCss(__dirname);
+  return fontCss ? `${stripped}\n${fontCss}` : stripped;
 }
 
 function escapeHtml(s: string): string {

@@ -8,6 +8,10 @@
       {
         "include": "worker/render/resume-preview.css",
         "watchAssets": true
+      },
+      {
+        "include": "worker/render/fonts/**/*",
+        "watchAssets": true
       }
     ]
   }

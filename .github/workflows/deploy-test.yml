@@ -278,6 +278,9 @@ jobs:
               libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
               libxrandr2 libxrender1 libxss1 libxtst6 \
               >/dev/null 2>&1 || true
+            if command -v fc-cache >/dev/null 2>&1; then
+              sudo -n fc-cache -f >/dev/null 2>&1 || true
+            fi
           fi
 
           pnpm_cmd() {

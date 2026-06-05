@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "build": "nest build && cp src/worker/render/resume-preview.css dist/worker/render/",
+    "build": "nest build && cp src/worker/render/resume-preview.css dist/worker/render/ && cp -R src/worker/render/fonts dist/worker/render/ 2>/dev/null || true",
     "predev": "pnpm -C packages/sqlite-pg build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
