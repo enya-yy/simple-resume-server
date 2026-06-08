@@ -154,16 +154,24 @@ jobs:
           fi
           upsert_env EXPORT_LOCAL_DIR "$TEST_EXPORT_LOCAL_DIR"
 
-          PUPPETEER_CACHE_DIR="$TEST_SERVER_DIR/worker/.cache/puppeteer"
+          WORKER_DIR="$TEST_SERVER_DIR/worker"
+          PUPPETEER_CACHE_DIR="$WORKER_DIR/.cache/puppeteer"
           mkdir -p "$PUPPETEER_CACHE_DIR"
           upsert_env PUPPETEER_CACHE_DIR "$PUPPETEER_CACHE_DIR"
 
           PUPPETEER_MIRROR="https://cdn.npmmirror.com/binaries/chrome-for-testing"
 
+          pnpm_cmd() {
+            corepack pnpm@10.33.0 "$@"
+          }
+
           chrome_is_usable_binary() {
             local candidate="$1"
             [ -x "$candidate" ] || return 1
-            # snap 过渡包会留下 shell 包装脚本，Puppeteer 无法直接启动。
+            # snap 包装脚本/路径在 headless SSH 部署里 Puppeteer 无法可靠启动。
+            case "$candidate" in
+              /snap/*) return 1 ;;
+            esac
             if head -c 2 "$candidate" 2>/dev/null | grep -q '^#!'; then
               return 1
             fi
@@ -174,8 +182,7 @@ jobs:
             for candidate in \
               /usr/bin/google-chrome-stable \
               /usr/bin/google-chrome \
-              /usr/bin/chromium \
-              /snap/bin/chromium; do
+              /usr/bin/chromium; do
               if chrome_is_usable_binary "$candidate"; then
                 echo "$candidate"
                 return 0
@@ -194,8 +201,8 @@ jobs:
               exec_path="$(grep '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" | tail -1 | cut -d= -f2-)"
             fi
             echo "[deploy] verifying Chrome launch (timeout 45s)"
-            if timeout 45 env PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" PUPPETEER_EXECUTABLE_PATH="$exec_path" \
-              pnpm_cmd --dir worker exec node --input-type=module -e "
+            if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" PUPPETEER_EXECUTABLE_PATH="$exec_path" \
+              timeout 45 pnpm_cmd --dir "$WORKER_DIR" exec node --input-type=module -e "
               import puppeteer from 'puppeteer';
               const path = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || puppeteer.executablePath();
               const browser = await puppeteer.launch({
@@ -232,11 +239,10 @@ jobs:
             fi
 
             echo "[deploy] installing Puppeteer Chrome via npmmirror (timeout 600s)"
-            if timeout 600 env \
-              PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
+            if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
               PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
               PUPPETEER_CHROME_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
-              pnpm_cmd --dir worker exec puppeteer browsers install chrome; then
+              timeout 600 pnpm_cmd --dir "$WORKER_DIR" exec puppeteer browsers install chrome; then
               echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
               remove_env PUPPETEER_EXECUTABLE_PATH
               if verify_chrome_launch; then
@@ -282,10 +288,6 @@ jobs:
               sudo -n fc-cache -f >/dev/null 2>&1 || true
             fi
           fi
-
-          pnpm_cmd() {
-            corepack pnpm@10.33.0 "$@"
-          }
 
           install_native_build_deps() {
             if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
@@ -380,9 +382,8 @@ jobs:
           echo "[deploy] step: sqlite migrate"
           pnpm_cmd migrate
 
-          cd "$TEST_SERVER_DIR/worker"
           echo "[deploy] step: worker build"
-          pnpm_cmd build
+          pnpm_cmd --dir "$WORKER_DIR" build
           echo "[deploy] step: ensure Chromium for PDF export"
           ensure_puppeteer_chrome
 
