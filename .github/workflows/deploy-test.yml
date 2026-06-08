@@ -165,6 +165,13 @@ jobs:
             corepack pnpm@10.33.0 "$@"
           }
 
+          # timeout(1) uses execvp and cannot see bash functions — call corepack directly.
+          pnpm_timeout() {
+            local secs="$1"
+            shift
+            timeout "$secs" corepack pnpm@10.33.0 "$@"
+          }
+
           chrome_is_usable_binary() {
             local candidate="$1"
             [ -x "$candidate" ] || return 1
@@ -202,7 +209,7 @@ jobs:
             fi
             echo "[deploy] verifying Chrome launch (timeout 45s)"
             if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" PUPPETEER_EXECUTABLE_PATH="$exec_path" \
-              timeout 45 pnpm_cmd --dir "$WORKER_DIR" exec node --input-type=module -e "
+              pnpm_timeout 45 --dir "$WORKER_DIR" exec node --input-type=module -e "
               import puppeteer from 'puppeteer';
               const path = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || puppeteer.executablePath();
               const browser = await puppeteer.launch({
@@ -242,7 +249,7 @@ jobs:
             if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
               PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
               PUPPETEER_CHROME_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
-              timeout 600 pnpm_cmd --dir "$WORKER_DIR" exec puppeteer browsers install chrome; then
+              pnpm_timeout 600 --dir "$WORKER_DIR" exec puppeteer browsers install chrome; then
               echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
               remove_env PUPPETEER_EXECUTABLE_PATH
               if verify_chrome_launch; then
