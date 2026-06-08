@@ -431,6 +431,13 @@ export const resumeModulesLooseSchema = z.preprocess(
   z.array(resumeModuleSchema).max(MAX_RESUME_SECTIONS).default([]),
 );
 
+export const resumeAvatarSchema = z
+  .object({
+    objectKey: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
 export const resumeDocumentStrictSchema = z
   .object({
     templateId: resumeTemplateIdSchema,
@@ -440,6 +447,7 @@ export const resumeDocumentStrictSchema = z
       .array(resumeModuleSchema)
       .max(MAX_RESUME_SECTIONS, { message: '模块数量过多' }),
     basicsSensitive: basicsSensitiveSchema,
+    avatar: resumeAvatarSchema.optional(),
   })
   .strict();
 
@@ -483,6 +491,12 @@ export const resumeDocumentSchema = z.object({
     (val) => mergeBasicsSensitiveInput(val),
     basicsSensitiveSchema,
   ),
+  avatar: resumeAvatarSchema.optional(),
+});
+
+export const uploadResumeAvatarResponseSchema = z.object({
+  avatarUrl: z.string(),
+  document: resumeDocumentSchema,
 });
 
 export const resumeSchema = z.object({

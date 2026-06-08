@@ -45,6 +45,12 @@ export type ResumeDocumentBasics = {
   summary: string;
 };
 
+/** 简历头像存储引用（二进制经独立上传接口写入） */
+export type ResumeAvatar = {
+  objectKey: string;
+  updatedAt: string;
+};
+
 export type ResumeModuleType =
   | 'experience'
   | 'education'
@@ -79,4 +85,6 @@ export type ResumeDocument = {
   sections: ResumeModule[];
   /** 基础信息字段级敏感标记 */
   basicsSensitive?: ResumeBasicsSensitiveMap;
+  /** 用户上传的简历头像 */
+  avatar?: ResumeAvatar;
 };

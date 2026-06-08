@@ -7,11 +7,18 @@ import {
   Patch,
   Post,
   Req,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+import { memoryStorage } from 'multer';
 import { CsrfGuard } from '../../common/guards/csrf.guard';
 import { SessionAuthGuard } from '../../common/guards/session-auth.guard';
+import { parseEnv } from '../../config/env.schema';
 import { ResumesService } from './resumes.service';
 
 @Controller('resumes')
@@ -60,6 +67,57 @@ export class ResumesController {
       req.session.userId as string,
       resumeId,
     );
+  }
+
+  @Post(':resumeId/avatar')
+  @UseGuards(SessionAuthGuard, CsrfGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: parseEnv(process.env).AVATAR_MAX_FILE_BYTES,
+      },
+    }),
+  )
+  uploadAvatar(
+    @Req() req: Request,
+    @Param('resumeId') resumeId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.resumesService.uploadAvatar(
+      req.session.userId as string,
+      resumeId,
+      file,
+    );
+  }
+
+  @Delete(':resumeId/avatar')
+  @UseGuards(SessionAuthGuard, CsrfGuard)
+  deleteAvatar(@Req() req: Request, @Param('resumeId') resumeId: string) {
+    return this.resumesService.deleteAvatar(
+      req.session.userId as string,
+      resumeId,
+    );
+  }
+
+  @Get(':resumeId/avatar')
+  @UseGuards(SessionAuthGuard)
+  @Throttle({ default: { limit: 120, ttl: 60000 } })
+  async getAvatar(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Param('resumeId') resumeId: string,
+  ) {
+    const result = await this.resumesService.streamAvatar(
+      req.session.userId as string,
+      resumeId,
+    );
+    if ('redirectUrl' in result) {
+      res.redirect(302, result.redirectUrl);
+      return;
+    }
+    return result;
   }
 
   @Delete(':resumeId')

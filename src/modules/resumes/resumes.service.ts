@@ -1,3 +1,5 @@
+import { createReadStream } from 'node:fs';
+import { access } from 'node:fs/promises';
 import {
   BadRequestException,
   Injectable,
@@ -5,6 +7,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { StreamableFile } from '@nestjs/common';
 import {
   createResumeResponseSchema,
   duplicateResumeResponseSchema,
@@ -14,10 +17,19 @@ import {
   patchResumeBodySchema,
   patchResumeResponseSchema,
   resumeDocumentSchema,
+  uploadResumeAvatarResponseSchema,
   type ResumeDocument,
 } from '../../contracts/index';
+import { parseEnv } from '../../config/env.schema';
+import { presignExportDownload } from '../export-jobs/export-artifact-presign';
 import { ZodError } from 'zod';
 import { extractResumeListPreview } from './resume-list-preview';
+import {
+  isAcceptedAvatarMime,
+  resolveLocalAvatarPath,
+  storeResumeAvatar,
+} from './resume-avatar-storage';
+import { resolveResumeAvatarUrl } from './resume-avatar-url';
 import { ResumesRepository } from './resumes.repository';
 
 @Injectable()
@@ -159,6 +171,7 @@ export class ResumesService {
         layoutOptions:
           parsed.document.layoutOptions ?? existingDoc.layoutOptions,
         basicsSensitive: mergedBasicsSensitive,
+        avatar: existingDoc.avatar,
       };
 
       const row = await this.resumesRepository.updateDocumentForOwner(
@@ -295,5 +308,236 @@ export class ResumesService {
         message: '简历不存在',
       });
     }
+  }
+
+  async uploadAvatar(
+    userId: string,
+    resumeId: string,
+    file?: Express.Multer.File,
+  ) {
+    const env = parseEnv(process.env);
+    if (!file?.buffer?.length) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '请上传图片文件',
+      });
+    }
+    if (file.size > env.AVATAR_MAX_FILE_BYTES) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: `图片过大，请控制在 ${Math.floor(env.AVATAR_MAX_FILE_BYTES / 1024 / 1024)}MB 以内`,
+      });
+    }
+    const mime = file.mimetype?.trim() ?? '';
+    if (!isAcceptedAvatarMime(mime)) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '不支持的图片格式，请上传 JPG、PNG 或 WebP',
+      });
+    }
+
+    const existing = await this.resumesRepository.findByIdForOwner(
+      resumeId,
+      userId,
+    );
+    if (!existing) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
+      });
+    }
+
+    let existingDoc: ResumeDocument;
+    try {
+      existingDoc = resumeDocumentSchema.parse(
+        existing.document_json,
+      ) as ResumeDocument;
+    } catch (e) {
+      if (e instanceof ZodError) {
+        throw new UnprocessableEntityException({
+          code: ERROR_CODES.RESUME_DOCUMENT_INVALID,
+          message: '当前简历数据格式异常，暂无法上传头像',
+        });
+      }
+      throw e;
+    }
+
+    let stored: { objectKey: string };
+    try {
+      stored = await storeResumeAvatar({
+        userId,
+        resumeId,
+        buffer: file.buffer,
+        mimeType: mime,
+      });
+    } catch (err) {
+      this.logger.error(
+        `avatar storage failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '头像保存失败，请稍后重试',
+      });
+    }
+
+    const updatedAt = new Date().toISOString();
+    const documentToSave: ResumeDocument = {
+      ...existingDoc,
+      avatar: {
+        objectKey: stored.objectKey,
+        updatedAt,
+      },
+    };
+
+    const row = await this.resumesRepository.updateDocumentForOwner(
+      resumeId,
+      userId,
+      documentToSave,
+    );
+    if (!row) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
+      });
+    }
+
+    const avatarUrl = await resolveResumeAvatarUrl({
+      resumeId,
+      objectKey: stored.objectKey,
+      updatedAt,
+    });
+
+    return uploadResumeAvatarResponseSchema.parse({
+      avatarUrl,
+      document: documentToSave,
+    });
+  }
+
+  async deleteAvatar(userId: string, resumeId: string) {
+    const existing = await this.resumesRepository.findByIdForOwner(
+      resumeId,
+      userId,
+    );
+    if (!existing) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
+      });
+    }
+
+    let existingDoc: ResumeDocument;
+    try {
+      existingDoc = resumeDocumentSchema.parse(
+        existing.document_json,
+      ) as ResumeDocument;
+    } catch (e) {
+      if (e instanceof ZodError) {
+        throw new UnprocessableEntityException({
+          code: ERROR_CODES.RESUME_DOCUMENT_INVALID,
+          message: '当前简历数据格式异常',
+        });
+      }
+      throw e;
+    }
+
+    if (!existingDoc.avatar) {
+      return patchResumeResponseSchema.parse({
+        resumeId: existing.id,
+        title: existing.title,
+        document: existingDoc,
+        schemaVersion: existing.schema_version,
+      });
+    }
+
+    const documentToSave: ResumeDocument = { ...existingDoc, avatar: undefined };
+    const row = await this.resumesRepository.updateDocumentForOwner(
+      resumeId,
+      userId,
+      documentToSave,
+    );
+    if (!row) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
+      });
+    }
+
+    return patchResumeResponseSchema.parse({
+      resumeId: row.id,
+      title: row.title,
+      document: documentToSave,
+      schemaVersion: row.schema_version,
+    });
+  }
+
+  async streamAvatar(
+    userId: string,
+    resumeId: string,
+  ): Promise<StreamableFile | { redirectUrl: string }> {
+    const row = await this.resumesRepository.findByIdForOwner(resumeId, userId);
+    if (!row) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '简历不存在',
+      });
+    }
+
+    let doc: ResumeDocument;
+    try {
+      doc = resumeDocumentSchema.parse(row.document_json) as ResumeDocument;
+    } catch (e) {
+      if (e instanceof ZodError) {
+        throw new NotFoundException({
+          code: ERROR_CODES.RESUME_NOT_FOUND,
+          message: '头像不存在',
+        });
+      }
+      throw e;
+    }
+
+    const avatar = doc.avatar;
+    if (!avatar?.objectKey) {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '头像不存在',
+      });
+    }
+
+    const env = parseEnv(process.env);
+    const hasS3 =
+      Boolean(env.S3_BUCKET) &&
+      Boolean(env.S3_ACCESS_KEY_ID) &&
+      Boolean(env.S3_SECRET_ACCESS_KEY);
+    if (hasS3) {
+      const presigned = await presignExportDownload(env, avatar.objectKey);
+      if (presigned?.url) {
+        return { redirectUrl: presigned.url };
+      }
+    }
+
+    const filePath = resolveLocalAvatarPath(avatar.objectKey);
+    try {
+      await access(filePath);
+    } catch {
+      throw new NotFoundException({
+        code: ERROR_CODES.RESUME_NOT_FOUND,
+        message: '头像文件不存在',
+      });
+    }
+
+    const stream = createReadStream(filePath);
+    const ext = avatar.objectKey.split('.').pop()?.toLowerCase();
+    const type =
+      ext === 'png'
+        ? 'image/png'
+        : ext === 'webp'
+          ? 'image/webp'
+          : 'image/jpeg';
+    return new StreamableFile(stream, {
+      type,
+      disposition: 'inline',
+    });
   }
 }

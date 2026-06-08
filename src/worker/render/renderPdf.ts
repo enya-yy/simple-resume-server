@@ -86,7 +86,6 @@ async function launchBrowser(): Promise<Browser> {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Puppeteer launch failed (executable: ${executablePath}): ${detail}`,
-      { cause: err },
     );
   }
 }

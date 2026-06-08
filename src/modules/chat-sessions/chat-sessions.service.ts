@@ -1,3 +1,5 @@
+import { createReadStream } from 'node:fs';
+import { access } from 'node:fs/promises';
 import {
   BadRequestException,
   ConflictException,
@@ -6,6 +8,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { StreamableFile } from '@nestjs/common';
 import {
   buildFormCardLeadIn,
   buildAgentReply,
@@ -26,6 +29,10 @@ import {
   patchChatSessionBodySchema,
   resumeDocumentSchema,
   sendChatMessageBodySchema,
+  insertImageChoiceMessagesResponseSchema,
+  recordAvatarAppliedMessageResponseSchema,
+  buildAvatarAppliedChatText,
+  CHAT_IMAGE_CHOICE_AVATAR_SUGGESTION,
   RESUME_TITLE_MAX,
   type FormField,
   type ResumeDocument,
@@ -38,7 +45,14 @@ import { parseEnv } from '../../config/env.schema';
 import { CreditsService } from '../credits/credits.service';
 import { PolishJobsService } from '../polish-jobs/polish-jobs.service';
 import { ResumesRepository } from '../resumes/resumes.repository';
+import { presignExportDownload } from '../export-jobs/export-artifact-presign';
 import { ChatMessagesRepository } from './chat-messages.repository';
+import {
+  assertChatImageObjectKeyForSession,
+  isAcceptedChatImageMime,
+  resolveLocalChatImagePath,
+  storeChatStagedImage,
+} from './chat-image-storage';
 import { ChatSessionsRepository } from './chat-sessions.repository';
 import { ResumeAgentService } from '../resume-agent/resume-agent.service';
 import { LlmTokenUsageService } from '../llm-token-usage/llm-token-usage.service';
@@ -313,6 +327,220 @@ export class ChatSessionsService {
     };
   }
 
+  private buildImageChoiceSuggestions(resumeImported: boolean): string[] {
+    const items = ['设为用户头像'];
+    if (!resumeImported) {
+      items.push('解析为简历内容');
+    }
+    return items;
+  }
+
+  async insertImageChoiceMessages(
+    userId: string,
+    sessionId: string,
+    params: {
+      file?: Express.Multer.File;
+      text?: string;
+    },
+  ) {
+    await this.assertSessionOwnership(userId, sessionId);
+
+    const file = params.file;
+    if (!file?.buffer?.length) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '请上传图片文件',
+      });
+    }
+
+    const env = parseEnv(process.env);
+    const maxBytes = env.AVATAR_MAX_FILE_BYTES;
+    if (file.size > maxBytes) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: `图片过大，请控制在 ${Math.floor(maxBytes / 1024 / 1024)}MB 以内`,
+      });
+    }
+
+    const mime = file.mimetype?.trim() ?? '';
+    if (!isAcceptedChatImageMime(mime)) {
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '不支持的图片格式，请上传 JPG、PNG 或 WebP',
+      });
+    }
+
+    let stored: { objectKey: string };
+    try {
+      stored = await storeChatStagedImage({
+        userId,
+        sessionId,
+        buffer: file.buffer,
+        mimeType: mime,
+        originalName: file.originalname ?? 'image',
+      });
+    } catch (err) {
+      this.logger.error(
+        `chat image staging failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      throw new BadRequestException({
+        code: ERROR_CODES.VALIDATION_FAILED,
+        message: '图片保存失败，请稍后重试',
+      });
+    }
+
+    const resumeImported =
+      await this.chatSessionsRepository.hasResumeImport(sessionId);
+    const suggestions = this.buildImageChoiceSuggestions(resumeImported);
+    const trimmedText = params.text?.trim() ?? '';
+    const displayName = file.originalname?.trim() || 'image.jpg';
+
+    const userRow = await this.chatMessagesRepository.insertMessage({
+      sessionId,
+      role: 'user',
+      contentType: 'text',
+      contentJson: {
+        type: 'text',
+        role: 'user',
+        text: trimmedText || '（附图）',
+        attachments: [
+          {
+            name: displayName,
+            mimeType: mime,
+            kind: 'image',
+            objectKey: stored.objectKey,
+          },
+        ],
+      },
+    });
+
+    let assistantMessageId: string | undefined;
+    if (!trimmedText) {
+      const assistantRow = await this.chatMessagesRepository.insertMessage({
+        sessionId,
+        role: 'assistant',
+        contentType: 'text',
+        contentJson: {
+          type: 'text',
+          role: 'assistant',
+          text: '收到你附上的图片。想用它做什么？',
+          suggestions,
+        },
+      });
+      assistantMessageId = assistantRow.id;
+    }
+
+    return insertImageChoiceMessagesResponseSchema.parse({
+      userMessageId: userRow.id,
+      assistantMessageId,
+      stagingObjectKey: stored.objectKey,
+      suggestions,
+    });
+  }
+
+  private async clearStaleImageChoiceSuggestions(
+    sessionId: string,
+  ): Promise<void> {
+    const rows = await this.chatMessagesRepository.listBySession(sessionId, 50);
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const row = rows[i];
+      if (row.role !== 'assistant' || row.content_type !== 'text') continue;
+      const content = row.content_json as {
+        type?: string;
+        suggestions?: string[];
+        text?: string;
+        role?: string;
+      };
+      if (content.type !== 'text') continue;
+      if (
+        !content.suggestions?.includes(CHAT_IMAGE_CHOICE_AVATAR_SUGGESTION)
+      ) {
+        continue;
+      }
+      const { suggestions: _removed, ...rest } = content;
+      await this.chatMessagesRepository.updateContentJson(sessionId, row.id, {
+        ...rest,
+      });
+      break;
+    }
+  }
+
+  async recordAvatarAppliedMessage(userId: string, sessionId: string) {
+    await this.assertSessionOwnership(userId, sessionId);
+
+    await this.clearStaleImageChoiceSuggestions(sessionId);
+
+    const assistantRow = await this.chatMessagesRepository.insertMessage({
+      sessionId,
+      role: 'assistant',
+      contentType: 'text',
+      contentJson: {
+        type: 'text',
+        role: 'assistant',
+        text: buildAvatarAppliedChatText(),
+      },
+    });
+
+    return recordAvatarAppliedMessageResponseSchema.parse({
+      assistantMessageId: assistantRow.id,
+    });
+  }
+
+  async streamChatAttachmentImage(
+    userId: string,
+    sessionId: string,
+    objectKey: string,
+  ): Promise<StreamableFile | { redirectUrl: string }> {
+    await this.assertSessionOwnership(userId, sessionId);
+
+    if (
+      !assertChatImageObjectKeyForSession({ userId, sessionId, objectKey })
+    ) {
+      throw new NotFoundException({
+        code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
+        message: '附件不存在',
+      });
+    }
+
+    const env = parseEnv(process.env);
+    const hasS3 =
+      Boolean(env.S3_BUCKET) &&
+      Boolean(env.S3_ACCESS_KEY_ID) &&
+      Boolean(env.S3_SECRET_ACCESS_KEY);
+
+    if (hasS3) {
+      const presigned = await presignExportDownload(env, objectKey);
+      if (presigned?.url) {
+        return { redirectUrl: presigned.url };
+      }
+    }
+
+    const filePath = resolveLocalChatImagePath(objectKey);
+    try {
+      await access(filePath);
+    } catch {
+      throw new NotFoundException({
+        code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
+        message: '附件文件不存在',
+      });
+    }
+
+    const ext = objectKey.split('.').pop()?.toLowerCase();
+    const type =
+      ext === 'png'
+        ? 'image/png'
+        : ext === 'webp'
+          ? 'image/webp'
+          : 'image/jpeg';
+    const stream = createReadStream(filePath);
+    return new StreamableFile(stream, {
+      type,
+      disposition: 'inline',
+    });
+  }
+
   async patchFormCardMessage(
     userId: string,
     sessionId: string,
@@ -439,21 +667,43 @@ export class ChatSessionsService {
       );
     }
 
-    const userRow = await this.chatMessagesRepository.insertMessage({
-      sessionId,
-      role: isSystemEvent ? 'system' : 'user',
-      contentType: 'text',
-      contentJson: {
-        type: 'text',
+    let userRowId: string;
+    if (parsed.skipUserInsert) {
+      if (!parsed.existingUserMessageId) {
+        throw new BadRequestException({
+          code: ERROR_CODES.VALIDATION_FAILED,
+          message: '缺少 existingUserMessageId',
+        });
+      }
+      const existing = await this.chatMessagesRepository.findBySessionAndId(
+        sessionId,
+        parsed.existingUserMessageId,
+      );
+      if (!existing || existing.role !== 'user') {
+        throw new NotFoundException({
+          code: ERROR_CODES.CHAT_SESSION_NOT_FOUND,
+          message: '用户消息不存在',
+        });
+      }
+      userRowId = existing.id;
+    } else {
+      const userRow = await this.chatMessagesRepository.insertMessage({
+        sessionId,
         role: isSystemEvent ? 'system' : 'user',
-        text: parsed.content,
-      },
-    });
+        contentType: 'text',
+        contentJson: {
+          type: 'text',
+          role: isSystemEvent ? 'system' : 'user',
+          text: parsed.content,
+        },
+      });
+      userRowId = userRow.id;
+    }
 
     const historyRows = await this.chatMessagesRepository.listRecentBySession(
       sessionId,
       CHAT_HISTORY_MAX_MESSAGES,
-      userRow.id,
+      userRowId,
     );
     const chatHistory = buildChatHistoryForAgent(historyRows);
 

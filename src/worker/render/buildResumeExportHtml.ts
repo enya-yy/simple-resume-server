@@ -58,6 +58,10 @@ export type ResumeExportParts = {
   templateBody: string;
 };
 
+export type ResumeExportOptions = {
+  avatarDataUrl?: string | null;
+};
+
 function monorepoRoot(): string {
   return join(__dirname, '../../../..');
 }
@@ -329,9 +333,19 @@ function sortedSections(sections: ResumeModule[]): ResumeModule[] {
   return [...sections].sort((a, b) => a.order - b.order);
 }
 
-function buildClassicTemplateBody(doc: ResumeDocument): string {
+function buildClassicTemplateBody(
+  doc: ResumeDocument,
+  options?: ResumeExportOptions,
+): string {
   const b = doc.basics;
-  const header = `<header class="rp-classic__header"><h1 class="rp-classic__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-classic__headline">${escapeHtml(b.headline)}</p>` : ''}<div class="rp-classic__contacts">${b.phone.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">☎</span>${escapeHtml(b.phone)}</span>` : ''}${b.email.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">✉</span><span class="rp-classic__email">${escapeHtml(b.email)}</span></span>` : ''}${b.location.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">⌖</span>${escapeHtml(b.location)}</span>` : ''}</div></header>`;
+  const avatarDataUrl = options?.avatarDataUrl?.trim();
+  const headerAvatar = avatarDataUrl
+    ? `<div class="rp-classic__avatar-wrap">${avatarPhotoHtml('rp-classic__avatar-photo', avatarDataUrl)}</div>`
+    : '';
+  const headerClass = avatarDataUrl
+    ? 'rp-classic__header rp-classic__header--with-avatar'
+    : 'rp-classic__header';
+  const header = `<header class="${headerClass}">${headerAvatar}<h1 class="rp-classic__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-classic__headline">${escapeHtml(b.headline)}</p>` : ''}<div class="rp-classic__contacts">${b.phone.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">☎</span>${escapeHtml(b.phone)}</span>` : ''}${b.email.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">✉</span><span class="rp-classic__email">${escapeHtml(b.email)}</span></span>` : ''}${b.location.trim() ? `<span class="rp-classic__contact"><span class="rp-classic__contact-icon">⌖</span>${escapeHtml(b.location)}</span>` : ''}</div></header>`;
   const summary = b.summary.trim()
     ? `<section class="rp-classic__summary-block"><div class="rp-classic__summary-label">个人简介 · Profile Summary</div><p class="rp-classic__summary-text rp-md">${md(b.summary)}</p></section>`
     : '';
@@ -359,13 +373,20 @@ function buildClassicTemplateBody(doc: ResumeDocument): string {
   return `<div id="resume-classic" class="rp-classic">${header}${summary}<div class="rp-classic__sections">${sectionsHtml}</div></div>`;
 }
 
-function buildMinimalDualTemplateBody(doc: ResumeDocument): string {
+function buildMinimalDualTemplateBody(
+  doc: ResumeDocument,
+  options?: ResumeExportOptions,
+): string {
   const b = doc.basics;
   const sections = sortedSections(doc.sections);
   const sidebar = sections.filter((s) => s.type === 'skill' || s.type === 'custom');
   const main = sections.filter((s) => s.type !== 'skill' && s.type !== 'custom');
+  const avatarDataUrl = options?.avatarDataUrl?.trim();
+  const avatarBlock = avatarDataUrl
+    ? `<div class="rp-modern__avatar-wrap">${avatarPhotoHtml('rp-modern__avatar-photo', avatarDataUrl)}</div>`
+    : '';
 
-  const identity = `<div class="rp-modern__identity"><h1 class="rp-modern__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-modern__headline">${escapeHtml(b.headline)}</p>` : ''}</div>`;
+  const identity = `<div class="rp-modern__identity">${avatarBlock}<h1 class="rp-modern__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-modern__headline">${escapeHtml(b.headline)}</p>` : ''}</div>`;
   const contacts = `<div class="rp-modern__contacts-panel"><div class="rp-modern__contacts-label">联系方式 · Contacts</div><div class="rp-modern__contacts-list">${b.phone.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">☎</span><span>${escapeHtml(b.phone)}</span></div>` : ''}${b.email.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">✉</span><span class="rp-modern__email">${escapeHtml(b.email)}</span></div>` : ''}${b.location.trim() ? `<div class="rp-modern__contact-row"><span class="rp-modern__contact-icon">⌖</span><span>${escapeHtml(b.location)}</span></div>` : ''}</div></div>`;
 
   const sidebarHtml = sidebar
@@ -430,6 +451,10 @@ function buildMinimalDualTemplateBody(doc: ResumeDocument): string {
   return `<div id="resume-modern" class="rp-modern"><div class="rp-modern__accent"></div><div class="rp-modern__grid"><aside class="rp-modern__sidebar">${identity}${contacts}${sidebarHtml}</aside><div class="rp-modern__main">${summary}${mainHtml}</div></div></div>`;
 }
 
+function avatarPhotoHtml(className: string, dataUrl: string): string {
+  return `<img src="${dataUrl}" alt="" class="${className}" />`;
+}
+
 function nameInitialChar(fullName: string): string {
   const n = fullName.trim();
   if (!n) {
@@ -442,12 +467,19 @@ function nameInitialChar(fullName: string): string {
   return n.charAt(0);
 }
 
-function buildExecutiveDarkTemplateBody(doc: ResumeDocument): string {
+function buildExecutiveDarkTemplateBody(
+  doc: ResumeDocument,
+  options?: ResumeExportOptions,
+): string {
   const b = doc.basics;
   const sections = sortedSections(doc.sections);
   const sidebar = sections.filter((s) => s.type !== 'experience' && s.type !== 'project');
   const main = sections.filter((s) => s.type === 'experience' || s.type === 'project');
   const initial = escapeHtml(nameInitialChar(b.fullName.trim() || '（姓名）'));
+  const avatarDataUrl = options?.avatarDataUrl?.trim();
+  const avatarInner = avatarDataUrl
+    ? avatarPhotoHtml('rp-exec__avatar-photo', avatarDataUrl)
+    : `<span class="rp-exec__avatar-initial">${initial}</span>`;
 
   const contacts = `<div class="rp-exec__contacts"><h3 class="rp-exec__contacts-label">联系方式</h3>${b.email.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">✉</span><span class="rp-exec__email">${escapeHtml(b.email)}</span></div>` : ''}${b.phone.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">☎</span><span>${escapeHtml(b.phone)}</span></div>` : ''}${b.location.trim() ? `<div class="rp-exec__contact-row"><span class="rp-exec__contact-icon">⌖</span><span>${escapeHtml(b.location)}</span></div>` : ''}</div>`;
 
@@ -511,7 +543,7 @@ function buildExecutiveDarkTemplateBody(doc: ResumeDocument): string {
     })
     .join('');
 
-  return `<div id="resume-executive" class="rp-exec"><div class="rp-exec__accent"></div><div class="rp-exec__grid"><aside class="rp-exec__sidebar"><div class="rp-exec__avatar-wrap"><div class="rp-exec__avatar-ring"></div><div class="rp-exec__avatar-inner"></div><div class="rp-exec__avatar"><span class="rp-exec__avatar-initial">${initial}</span></div></div>${contacts}<div class="rp-exec__sidebar-sections">${sidebarHtml}</div></aside><div class="rp-exec__main">${header}${summary}<div class="rp-exec__main-sections">${mainHtml}</div></div></div><div class="rp-exec__corner rp-exec__corner--tr"></div><div class="rp-exec__corner rp-exec__corner--br"></div></div>`;
+  return `<div id="resume-executive" class="rp-exec"><div class="rp-exec__accent"></div><div class="rp-exec__grid"><aside class="rp-exec__sidebar"><div class="rp-exec__avatar-wrap"><div class="rp-exec__avatar-ring"></div><div class="rp-exec__avatar-inner"></div><div class="rp-exec__avatar">${avatarInner}</div></div>${contacts}<div class="rp-exec__sidebar-sections">${sidebarHtml}</div></aside><div class="rp-exec__main">${header}${summary}<div class="rp-exec__main-sections">${mainHtml}</div></div></div><div class="rp-exec__corner rp-exec__corner--tr"></div><div class="rp-exec__corner rp-exec__corner--br"></div></div>`;
 }
 
 function buildEditorialSectionTimeline(section: ResumeModule): string {
@@ -555,7 +587,10 @@ function buildEditorialSideSection(section: ResumeModule): string {
   return `<section class="rp-editorial__side-section"><h2 class="rp-editorial__side-title rp-editorial__side-title--lined">${escapeHtml(section.title)}</h2><div class="rp-editorial__side-items">${items}</div></section>`;
 }
 
-function buildEditorialGoldTemplateBody(doc: ResumeDocument): string {
+function buildEditorialGoldTemplateBody(
+  doc: ResumeDocument,
+  options?: ResumeExportOptions,
+): string {
   const b = doc.basics;
   const sections = sortedSections(doc.sections);
   const experience = sections.find((s) => s.type === 'experience');
@@ -564,6 +599,10 @@ function buildEditorialGoldTemplateBody(doc: ResumeDocument): string {
   const skill = sections.find((s) => s.type === 'skill');
   const custom = sections.find((s) => s.type === 'custom');
   const initial = escapeHtml(nameInitialChar(b.fullName.trim() || '（姓名）'));
+  const avatarDataUrl = options?.avatarDataUrl?.trim();
+  const avatarInner = avatarDataUrl
+    ? avatarPhotoHtml('rp-editorial__avatar-photo', avatarDataUrl)
+    : `<span class="rp-editorial__avatar-initial">${initial}</span>`;
 
   const contacts = `<div class="rp-editorial__contacts">${b.email.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">✉</span>${escapeHtml(b.email)}</span>` : ''}${b.email.trim() && b.phone.trim() ? `<span class="rp-editorial__contact-sep">|</span>` : ''}${b.phone.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">☎</span>${escapeHtml(b.phone)}</span>` : ''}${(b.email.trim() || b.phone.trim()) && b.location.trim() ? `<span class="rp-editorial__contact-sep">|</span>` : ''}${b.location.trim() ? `<span class="rp-editorial__contact"><span class="rp-editorial__contact-icon">⌖</span>${escapeHtml(b.location)}</span>` : ''}</div>`;
 
@@ -589,24 +628,27 @@ function buildEditorialGoldTemplateBody(doc: ResumeDocument): string {
   const colMain = `${experience && experience.items.length > 0 ? buildEditorialSectionTimeline(experience) : ''}${project && project.items.length > 0 ? buildEditorialSectionTimeline(project) : ''}`;
   const colSide = `${skillHtml}${education && education.items.length > 0 ? buildEditorialSideSection(education) : ''}${custom && custom.items.length > 0 ? buildEditorialSideSection(custom) : ''}`;
 
-  return `<div id="resume-editorial" class="rp-editorial"><div class="rp-editorial__band"><div class="rp-editorial__band-pattern"></div><div class="rp-editorial__band-line rp-editorial__band-line--top"></div><div class="rp-editorial__band-line rp-editorial__band-line--bottom"></div></div><div class="rp-editorial__avatar-wrap"><div class="rp-editorial__avatar-ring-outer"></div><div class="rp-editorial__avatar-ring-inner"></div><div class="rp-editorial__avatar"><span class="rp-editorial__avatar-initial">${initial}</span></div></div><div class="rp-editorial__body"><header class="rp-editorial__header"><h1 class="rp-editorial__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-editorial__headline">${escapeHtml(b.headline)}</p>` : ''}${contacts}${summary}</header><div class="rp-editorial__divider"><span class="rp-editorial__divider-line"></span><span class="rp-editorial__divider-diamond"></span><span class="rp-editorial__divider-line"></span></div><div class="rp-editorial__cols"><div class="rp-editorial__col-main">${colMain}</div><div class="rp-editorial__col-side">${colSide}</div></div></div><div class="rp-editorial__footer"><span class="rp-editorial__footer-line"></span><span class="rp-editorial__footer-dot"></span><span class="rp-editorial__footer-line"></span></div></div>`;
+  return `<div id="resume-editorial" class="rp-editorial"><div class="rp-editorial__band"><div class="rp-editorial__band-pattern"></div><div class="rp-editorial__band-line rp-editorial__band-line--top"></div><div class="rp-editorial__band-line rp-editorial__band-line--bottom"></div></div><div class="rp-editorial__avatar-wrap"><div class="rp-editorial__avatar-ring-outer"></div><div class="rp-editorial__avatar-ring-inner"></div><div class="rp-editorial__avatar">${avatarInner}</div></div><div class="rp-editorial__body"><header class="rp-editorial__header"><h1 class="rp-editorial__name">${escapeHtml(b.fullName.trim() || '（姓名）')}</h1>${b.headline.trim() ? `<p class="rp-editorial__headline">${escapeHtml(b.headline)}</p>` : ''}${contacts}${summary}</header><div class="rp-editorial__divider"><span class="rp-editorial__divider-line"></span><span class="rp-editorial__divider-diamond"></span><span class="rp-editorial__divider-line"></span></div><div class="rp-editorial__cols"><div class="rp-editorial__col-main">${colMain}</div><div class="rp-editorial__col-side">${colSide}</div></div></div><div class="rp-editorial__footer"><span class="rp-editorial__footer-line"></span><span class="rp-editorial__footer-dot"></span><span class="rp-editorial__footer-line"></span></div></div>`;
 }
 
-export function buildResumeExportParts(doc: ResumeDocument): ResumeExportParts {
+export function buildResumeExportParts(
+  doc: ResumeDocument,
+  options?: ResumeExportOptions,
+): ResumeExportParts {
   const rootClass = rpRootClass(doc);
   let templateBody: string;
   switch (doc.templateId) {
     case 'minimal-dual':
-      templateBody = buildMinimalDualTemplateBody(doc);
+      templateBody = buildMinimalDualTemplateBody(doc, options);
       break;
     case 'executive-dark':
-      templateBody = buildExecutiveDarkTemplateBody(doc);
+      templateBody = buildExecutiveDarkTemplateBody(doc, options);
       break;
     case 'editorial-gold':
-      templateBody = buildEditorialGoldTemplateBody(doc);
+      templateBody = buildEditorialGoldTemplateBody(doc, options);
       break;
     default:
-      templateBody = buildClassicTemplateBody(doc);
+      templateBody = buildClassicTemplateBody(doc, options);
       break;
   }
   return { rootClass, templateBody };

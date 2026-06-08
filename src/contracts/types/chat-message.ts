@@ -2,6 +2,9 @@ export type ChatMessageAttachment = {
   name: string;
   mimeType?: string;
   kind?: string;
+  objectKey?: string;
+  /** 仅前端乐观展示，不入库 */
+  previewUrl?: string;
 };
 
 export type TextMessage = {

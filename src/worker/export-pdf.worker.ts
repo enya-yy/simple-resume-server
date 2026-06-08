@@ -11,6 +11,7 @@ import {
   parseExportStorageTarget,
 } from '../config/export-storage.js';
 import { buildResumeExportParts } from './render/buildResumeExportHtml.js';
+import { loadResumeAvatarDataUrl } from './storage/loadResumeAvatarDataUrl.js';
 import { renderResumeExportPartsToPdf } from './render/renderPdf.js';
 import { saveExportPdf } from './storage/saveExportArtifact.js';
 
@@ -129,7 +130,10 @@ export async function runExportJobStep(
     try {
       // 与编辑器预览一致：导出本人简历时不套用敏感字段隐藏（聊天预览 maskSensitive=false）
       const masked = applySensitiveFieldPolicy(parsed, { mask: false });
-      const parts = buildResumeExportParts(masked);
+      const avatarDataUrl = masked.avatar?.objectKey
+        ? await loadResumeAvatarDataUrl(masked.avatar.objectKey)
+        : null;
+      const parts = buildResumeExportParts(masked, { avatarDataUrl });
       const pdf = await renderResumeExportPartsToPdf(parts);
       try {
         await saveExportPdf(storage, objectKey, pdf);

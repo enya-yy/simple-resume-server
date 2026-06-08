@@ -136,6 +136,12 @@ const envSchema = z
       .int()
       .positive()
       .default(10 * 1024 * 1024),
+    /** 简历头像：单文件最大字节数（默认 2MB） */
+    AVATAR_MAX_FILE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2 * 1024 * 1024),
     /** 导入 LLM 调用超时（毫秒）；含 OCR + 结构化解析，默认 3 分钟 */
     IMPORT_LLM_TIMEOUT_MS: z.coerce
       .number()

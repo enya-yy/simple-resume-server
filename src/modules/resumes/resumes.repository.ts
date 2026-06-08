@@ -227,6 +227,7 @@ export class ResumesRepository {
 
       const newResumeId = randomUUID();
       const newSessionId = randomUUID();
+      const docForDuplicate = { ...docParsed, avatar: undefined };
 
       const ins = await client.query<{
         id: string;
@@ -240,7 +241,7 @@ export class ResumesRepository {
           newResumeId,
           userId,
           dupTitle,
-          JSON.stringify(docParsed),
+          JSON.stringify(docForDuplicate),
           source.schema_version,
         ],
       );
