@@ -22,6 +22,7 @@ env:
   TEST_SSH_OPTIONS: >-
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
+    -o ConnectTimeout=30
     -o ServerAliveInterval=30
     -o ServerAliveCountMax=20
     -o TCPKeepAlive=yes
@@ -40,6 +41,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rsync sshpass
+          cat > /tmp/ssh-deploy.sh <<'EOF'
+          ssh_with_retry() {
+            local attempt=1 max=5 wait=15
+            while [ "$attempt" -le "$max" ]; do
+              if "$@"; then
+                return 0
+              fi
+              local code=$?
+              echo "[deploy] SSH failed (exit $code), attempt $attempt/$max"
+              if [ "$attempt" -ge "$max" ]; then
+                return "$code"
+              fi
+              echo "[deploy] retrying in ${wait}s..."
+              sleep "$wait"
+              wait=$((wait * 2))
+              attempt=$((attempt + 1))
+            done
+          }
+          EOF
 
       - name: Validate deployment configuration
         env:
@@ -54,7 +74,9 @@ jobs:
         env:
           SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
         run: |
-          sshpass -e ssh \
+          # shellcheck source=/dev/null
+          source /tmp/ssh-deploy.sh
+          ssh_with_retry sshpass -e ssh \
             -p "$TEST_SSH_PORT" \
             $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
@@ -89,7 +111,9 @@ jobs:
         env:
           SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
         run: |
-          sshpass -e rsync -az --delete --no-owner --no-group --no-perms \
+          # shellcheck source=/dev/null
+          source /tmp/ssh-deploy.sh
+          ssh_with_retry sshpass -e rsync -az --delete --no-owner --no-group --no-perms \
             -e "ssh -p $TEST_SSH_PORT $TEST_SSH_OPTIONS" \
             --exclude='.git/' \
             --exclude='.github/' \
@@ -106,7 +130,9 @@ jobs:
         env:
           SSHPASS: ${{ secrets.TEST_SSH_PASSWORD }}
         run: |
-          sshpass -e ssh \
+          # shellcheck source=/dev/null
+          source /tmp/ssh-deploy.sh
+          ssh_with_retry sshpass -e ssh \
             -p "$TEST_SSH_PORT" \
             $TEST_SSH_OPTIONS \
             "$TEST_SSH_USER@$TEST_SSH_HOST" \
