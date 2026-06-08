@@ -15,6 +15,7 @@ import {
   analyzeResumeCompletion,
   buildResumeAgentContext,
   resolveResumeAgentTurnMeta,
+  isCasualChatKind,
   buildResumeCatalog,
   buildResumeSummary,
   buildChatHistoryForAgent,
@@ -971,9 +972,11 @@ export class ChatSessionsService {
       }
 
       const completion = analyzeResumeCompletion(document);
-      // 已弹出表单时不再推送「猜你想做」，避免与「请先填表」这一主任务抢注意力
+      // 已弹出表单时不再推送「猜你想做」，避免与「请先填表」这一主任务抢注意力；
+      // 寒暄 / 闲聊轮也不挂快捷操作，避免一句问候就甩按钮显得催促。
       if (
         contentType !== 'form_card' &&
+        !isCasualChatKind(resolvedMeta.chatKind) &&
         completion.suggestionPhrases.length > 0
       ) {
         if (

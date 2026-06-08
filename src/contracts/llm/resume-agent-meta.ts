@@ -18,14 +18,31 @@ export const TURN_OUTCOMES = {
 
 export type TurnOutcome = (typeof TURN_OUTCOMES)[keyof typeof TURN_OUTCOMES];
 
+/** chat_only 这一轮的细分类型，用于决定回复语气与是否推送快捷操作。 */
+export const CHAT_KINDS = {
+  GREETING: 'greeting',
+  SMALLTALK: 'smalltalk',
+  HELP: 'help',
+  UNCLEAR: 'unclear',
+} as const;
+
+export type ChatKind = (typeof CHAT_KINDS)[keyof typeof CHAT_KINDS];
+
 const OUTCOME_SET = new Set<string>(Object.values(TURN_OUTCOMES));
 const INTENT_SET = new Set<string>(Object.values(CHAT_INTENTS));
+const CHAT_KIND_SET = new Set<string>(Object.values(CHAT_KINDS));
+
+/** 寒暄 / 闲聊这类轻量对话，不挂载「猜你想做」快捷按钮，避免显得催促。 */
+export function isCasualChatKind(kind?: ChatKind): boolean {
+  return kind === CHAT_KINDS.GREETING || kind === CHAT_KINDS.SMALLTALK;
+}
 
 export type ResumeAgentTurnMeta = {
   outcome: TurnOutcome;
   intent: ChatIntent;
   confidence: number;
   clarifyHint?: string;
+  chatKind?: ChatKind;
 };
 
 export type ResumeUiActionLike =
@@ -58,11 +75,17 @@ export function parseResumeAgentTurnMeta(
       ? args.clarifyHint.trim().slice(0, 80)
       : undefined;
 
+  const chatKind =
+    typeof args.chatKind === 'string' && CHAT_KIND_SET.has(args.chatKind)
+      ? (args.chatKind as ChatKind)
+      : undefined;
+
   return {
     outcome: outcomeRaw as TurnOutcome,
     intent: intentRaw as ChatIntent,
     confidence,
     clarifyHint,
+    chatKind,
   };
 }
 
@@ -326,16 +349,18 @@ export function buildAgentReply(input: BuildAgentReplyInput): string {
   }
 
   if (meta.outcome === TURN_OUTCOMES.CHAT_ONLY) {
-    return [
-      '## 我可以帮你',
-      '',
-      '告诉我你想改简历的哪一部分，或点选下方快捷操作。',
-    ].join('\n');
+    // 寒暄 / 闲聊：用一句轻松的人话回应，不用标题卡，也不催促操作。
+    // （模型若自带 ≤60 字的自然回复，会在上层优先采用，这里是兜底。）
+    if (isCasualChatKind(meta.chatKind)) {
+      return '你好呀～我可以帮你一起完善简历。想从哪部分开始都行，或者先跟我说说你的情况。';
+    }
+    // 明确求助「怎么用」：给一句说明 + 引导快捷操作。
+    if (meta.chatKind === CHAT_KINDS.HELP) {
+      return '我可以帮你修改简历的任意部分，比如基础信息、工作经历、项目或技能。直接告诉我想改哪里，或点选下方快捷操作。';
+    }
+    // 想改但没说清：温和地问一句，不用「## 我可以帮你」这种菜单腔。
+    return '想先完善简历的哪一部分呢？可以直接描述需求，或点选下方快捷操作。';
   }
 
-  return [
-    '## 还有什么需要帮忙？',
-    '',
-    '你可以继续描述修改需求，或点选下方快捷操作。',
-  ].join('\n');
+  return '还有什么想调整的？继续描述修改需求即可，或点选下方快捷操作。';
 }

@@ -23,7 +23,8 @@ export function buildResumeAgentSystemPrompt(resumeAgentContext?: string): strin
     ? `\n# 当前简历上下文（用 itemId / bullet[index] 定位，勿猜数组下标）\n${resumeAgentContext}\n`
     : '';
 
-  return `你是专业的简历辅导顾问。通过对话帮用户完善结构化简历。
+  return `你是专业、亲切的简历辅导顾问。通过对话帮用户完善结构化简历。
+语气自然、口语化、不啰嗦；遇到寒暄/闲聊时像真人一样轻松回应，不要端着、不要堆砌操作清单。跟随用户使用的语言。
 ${contextBlock}
 # 可操作的简历结构
 - basics: fullName(姓名), email, phone, location, headline(期望职位), summary(个人简介)
@@ -52,8 +53,11 @@ ${contextBlock}
 6. 需要用户填写多字段时调用 show_form_card，outcome=show_form；leadIn 可省略（系统会用模板）
 7. 用户要看预览：show_preview + outcome=preview
 8. 用户要润色：request_polish + outcome=polish
-9. 仅闲聊、不涉及改简历：不调用 mutation，outcome=chat_only，intent=GENERAL_CHAT
-10. 勿在 meta 或工具参数里列举「猜你想做」类操作建议（界面另有快捷按钮）
+9. 不涉及改简历的对话：不调用 mutation，outcome=chat_only，intent=GENERAL_CHAT，并按下面区分 chatKind：
+   - 寒暄/问候（hi、你好、在吗）或闲聊/感谢 → chatKind=greeting 或 smalltalk；此时**可以**在 message 正文写一句口语化的简短回应（≤40 字，无标题、不列操作），系统会直接采用
+   - 用户问「你能做什么/怎么用」 → chatKind=help；message 留空，由系统给引导
+   - 想改简历但没说清改哪里 → chatKind=unclear；message 留空，由系统温和追问
+10. 勿在 meta 或工具参数里列举「猜你想做」类操作建议（界面另有快捷按钮）；寒暄/闲聊时尤其别甩操作清单
 
 # 示例（Few-shot）
 用户：「我叫张三，期望职位前端」→ update_basics + report_turn_meta(mutation_ok, EDIT_BASIC_INFO)
@@ -65,6 +69,9 @@ ${contextBlock}
 用户：「把字节那条第二条改成…」→ patch_item_bullets + report_turn_meta(mutation_ok, PATCH_FIELD)
 用户：「帮我润色字节经历第一条」→ request_polish + report_turn_meta(polish, OPTIMIZE_TEXT)
 用户：「哪段经历？」→ report_turn_meta(need_clarification, GENERAL_CHAT, clarifyHint: 要改哪一段工作经历？)
+用户：「hi」/「你好」→ message 正文：「你好呀～想从哪部分开始完善简历？」+ report_turn_meta(chat_only, GENERAL_CHAT, chatKind: greeting)
+用户：「谢谢」→ message 正文：「不客气～随时叫我」+ report_turn_meta(chat_only, GENERAL_CHAT, chatKind: smalltalk)
+用户：「你能帮我做什么？」→ message 留空 + report_turn_meta(chat_only, GENERAL_CHAT, chatKind: help)
 
 # 字段长度
 - 模块 title 最多 80 字，条目 title 最多 120 字，单条 bullet 最多 300 字
@@ -106,6 +113,12 @@ export const RESUME_AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = 
             type: 'string',
             description:
               '仅 need_clarification 时填写，一句追问，≤40 字',
+          },
+          chatKind: {
+            type: 'string',
+            enum: ['greeting', 'smalltalk', 'help', 'unclear'],
+            description:
+              '仅 outcome=chat_only 时填写：greeting=寒暄问候，smalltalk=闲聊/感谢，help=问能做什么/怎么用，unclear=想改但没说清',
           },
         },
       },
