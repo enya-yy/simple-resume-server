@@ -14,6 +14,7 @@ describe("buildResumeExportHtml", () => {
         fontSizeStep: 1,
         pageMargin: "standard",
         bodyLineHeight: "normal",
+        showAvatar: true,
       },
       basics: {
         fullName: "林晓晨",
@@ -38,6 +39,7 @@ describe("buildResumeExportHtml", () => {
         fontSizeStep: 1,
         pageMargin: "standard",
         bodyLineHeight: "normal",
+        showAvatar: true,
       },
       basics: {
         fullName: "林晓晨",
@@ -76,6 +78,7 @@ describe("buildResumeExportHtml", () => {
         fontSizeStep: 1,
         pageMargin: "standard",
         bodyLineHeight: "normal",
+        showAvatar: true,
       },
       basics: {
         fullName: "陈远舟",
@@ -108,6 +111,7 @@ describe("buildResumeExportHtml", () => {
         fontSizeStep: 1,
         pageMargin: "standard",
         bodyLineHeight: "normal",
+        showAvatar: true,
       },
       basics: {
         fullName: "苏晚晴",
@@ -132,6 +136,7 @@ describe("buildResumeExportHtml", () => {
         fontSizeStep: 1,
         pageMargin: "standard",
         bodyLineHeight: "normal",
+        showAvatar: true,
       },
       basics: {
         fullName: "测试",

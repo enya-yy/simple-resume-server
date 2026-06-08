@@ -18,6 +18,8 @@ export type ResumeLayoutOptions = {
   fontSizeStep: ResumeFontSizeStep;
   pageMargin: ResumePageMargin;
   bodyLineHeight: ResumeBodyLineHeight;
+  /** 是否在预览/导出中展示头像区域；默认 true */
+  showAvatar: boolean;
 };
 
 /** 与 `templateSupportsLayoutDimension` 对齐的维度键 */

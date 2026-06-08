@@ -35,7 +35,7 @@
     "ResumeLayoutOptions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fontSizeStep", "pageMargin", "bodyLineHeight"],
+      "required": ["fontSizeStep", "pageMargin", "bodyLineHeight", "showAvatar"],
       "properties": {
         "fontSizeStep": {
           "type": "integer",
@@ -49,6 +49,10 @@
         "bodyLineHeight": {
           "type": "string",
           "enum": ["tight", "normal", "relaxed"]
+        },
+        "showAvatar": {
+          "type": "boolean",
+          "description": "是否在预览/导出中展示头像区域"
         }
       }
     },

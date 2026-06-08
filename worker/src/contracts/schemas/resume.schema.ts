@@ -72,6 +72,7 @@ export const DEFAULT_RESUME_LAYOUT_OPTIONS: ResumeLayoutOptions = {
   fontSizeStep: 1,
   pageMargin: 'standard',
   bodyLineHeight: 'normal',
+  showAvatar: true,
 };
 
 export const resumeFontSizeStepSchema = z.union([
@@ -92,6 +93,7 @@ export const resumeLayoutOptionsStrictSchema = z.object({
   fontSizeStep: resumeFontSizeStepSchema,
   pageMargin: resumePageMarginSchema,
   bodyLineHeight: resumeBodyLineHeightSchema,
+  showAvatar: z.boolean(),
 });
 
 function normalizeLayoutOptionsInput(raw: unknown): ResumeLayoutOptions {
@@ -125,7 +127,9 @@ function normalizeLayoutOptionsInput(raw: unknown): ResumeLayoutOptions {
     lh === 'tight' || lh === 'normal' || lh === 'relaxed'
       ? lh
       : d.bodyLineHeight;
-  return { fontSizeStep, pageMargin, bodyLineHeight };
+  const sa = o.showAvatar;
+  const showAvatar: boolean = typeof sa === 'boolean' ? sa : d.showAvatar;
+  return { fontSizeStep, pageMargin, bodyLineHeight, showAvatar };
 }
 
 /** 宽松：缺省/非法字段回退为默认（旧 JSON、部分 PATCH） */
@@ -455,7 +459,7 @@ const patchResumeDocumentShape = z
   .object({
     templateId: resumeTemplateIdSchema,
     /** 可省略：旧客户端或手工 PATCH 未带此项时，服务端用库内已有值归并 */
-    layoutOptions: resumeLayoutOptionsStrictSchema.optional(),
+    layoutOptions: resumeLayoutOptionsLooseSchema.optional(),
     basics: resumeBasicsStrictSchema,
     sections: resumeModulesLooseSchema,
     basicsSensitive: basicsSensitiveSchema,

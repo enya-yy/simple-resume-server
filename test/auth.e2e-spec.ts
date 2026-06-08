@@ -129,6 +129,7 @@ describe('Auth (e2e)', () => {
       fontSizeStep: 1,
       pageMargin: 'standard',
       bodyLineHeight: 'normal',
+      showAvatar: true,
     });
     expect(loadRes.body.data.schemaVersion).toBe(1);
   });
@@ -305,6 +306,7 @@ describe('Auth (e2e)', () => {
       fontSizeStep: 2,
       pageMargin: 'compact',
       bodyLineHeight: 'relaxed',
+      showAvatar: true,
     });
   });
 
