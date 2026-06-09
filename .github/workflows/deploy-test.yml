@@ -28,8 +28,56 @@ env:
     -o TCPKeepAlive=yes
 
 jobs:
+  build-gate:
+    name: typecheck and build (deploy gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Install native build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3 pkg-config libsqlite3-dev
+
+      - name: Build sqlite-pg
+        run: |
+          pnpm --dir packages/sqlite-pg install --frozen-lockfile
+          pnpm --dir packages/sqlite-pg rebuild better-sqlite3
+          pnpm --dir packages/sqlite-pg typecheck
+          pnpm --dir packages/sqlite-pg build
+
+      - name: Build API
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm rebuild better-sqlite3
+          pnpm typecheck
+          pnpm build
+
+      - name: Build worker
+        run: |
+          pnpm --dir worker install --frozen-lockfile
+          pnpm --dir worker typecheck
+          pnpm --dir worker build
+
   deploy-server:
     name: deploy server to test server
+    needs: build-gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
 

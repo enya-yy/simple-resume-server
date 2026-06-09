@@ -6,6 +6,8 @@ type FontWeightSlot = 400 | 700;
 
 type ExportFontSpec = {
   family: string;
+  /** 可变字体：一份文件覆盖全字重，优先使用，内嵌后体积/字重最稳定 */
+  variable: string[];
   regular: string[];
   bold: string[];
 };
@@ -13,6 +15,7 @@ type ExportFontSpec = {
 const EXPORT_FONTS: ExportFontSpec[] = [
   {
     family: 'Noto Sans SC',
+    variable: ['NotoSansSC.ttf', 'NotoSansSC[wght].ttf', 'NotoSansSC-VF.ttf'],
     regular: [
       'NotoSansSC-Regular.otf',
       'NotoSansCJK-Regular.ttc',
@@ -22,6 +25,7 @@ const EXPORT_FONTS: ExportFontSpec[] = [
   },
   {
     family: 'Noto Serif SC',
+    variable: ['NotoSerifSC.ttf', 'NotoSerifSC[wght].ttf', 'NotoSerifSC-VF.ttf'],
     regular: [
       'NotoSerifSC-Regular.otf',
       'NotoSerifCJK-Regular.ttc',
@@ -40,27 +44,36 @@ const SYSTEM_FONT_DIRS = [
   '/usr/share/fonts/truetype/noto',
   '/usr/share/fonts/noto-cjk',
   '/usr/share/fonts/google-noto-cjk',
+  '/usr/share/fonts/opentype/noto-cjk',
 ];
 
-function resolveBundledFontDir(renderDir: string): string {
-  return join(renderDir, 'fonts');
+/**
+ * 内置字体可能落在两个 worker 各自的目录里（API 内嵌 worker 与独立 worker
+ * 都会处理导出任务）。从 render 目录回推 server 根目录后，统一覆盖两者的
+ * 源码/构建产物字体目录，这样仓库里只需保存一份字体文件。
+ */
+function bundledFontDirs(renderDir: string): string[] {
+  const serverRoot = join(renderDir, '..', '..', '..');
+  return [
+    join(renderDir, 'fonts'),
+    join(serverRoot, 'worker', 'dist', 'render', 'fonts'),
+    join(serverRoot, 'worker', 'src', 'render', 'fonts'),
+    join(serverRoot, 'dist', 'worker', 'render', 'fonts'),
+    join(serverRoot, 'src', 'worker', 'render', 'fonts'),
+  ];
 }
 
 function resolveFontFileUrl(
   renderDir: string,
   filenames: string[],
 ): string | null {
-  const bundledDir = resolveBundledFontDir(renderDir);
-  const candidates: string[] = [];
+  const dirs = [...bundledFontDirs(renderDir), ...SYSTEM_FONT_DIRS];
   for (const name of filenames) {
-    candidates.push(join(bundledDir, name));
-    for (const dir of SYSTEM_FONT_DIRS) {
-      candidates.push(join(dir, name));
-    }
-  }
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return pathToFileURL(candidate).href;
+    for (const dir of dirs) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) {
+        return pathToFileURL(candidate).href;
+      }
     }
   }
   return null;
@@ -68,10 +81,20 @@ function resolveFontFileUrl(
 
 function fontFormat(url: string): string {
   const lower = url.toLowerCase();
-  if (lower.endsWith('.ttc')) {
+  if (lower.endsWith('.ttc') || lower.endsWith('.ttf')) {
     return 'truetype';
   }
   return 'opentype';
+}
+
+function variableFontFaceRule(params: { family: string; url: string }): string {
+  return `@font-face {
+  font-family: "${params.family}";
+  src: url("${params.url}") format("${fontFormat(params.url)}");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}`;
 }
 
 function fontFaceRule(params: {
@@ -92,6 +115,11 @@ function fontFaceRule(params: {
 export function buildExportFontFaceCss(renderDir: string): string {
   const rules: string[] = [];
   for (const spec of EXPORT_FONTS) {
+    const variableUrl = resolveFontFileUrl(renderDir, spec.variable);
+    if (variableUrl) {
+      rules.push(variableFontFaceRule({ family: spec.family, url: variableUrl }));
+      continue;
+    }
     const regularUrl = resolveFontFileUrl(renderDir, spec.regular);
     const boldUrl = resolveFontFileUrl(renderDir, spec.bold);
     if (regularUrl) {

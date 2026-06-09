@@ -1,4 +1,15 @@
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 
@@ -110,19 +121,43 @@ async function openExportPage(browser: Browser): Promise<Page> {
   return page;
 }
 
-async function loadHtmlPage(page: Page, html: string): Promise<void> {
+/**
+ * 通过 file:// 临时文件加载 HTML，而非 page.setContent()。
+ *
+ * setContent 生成的是 about:blank 文档，Chrome 出于安全会拒绝从中加载 file://
+ * 子资源（@font-face 的本地字体永远不会被请求），导致内嵌字体失效——在没有系统
+ * 中文字体的服务器（如 Ubuntu）上中文直接渲染为空白。改用 file:// 页面后，文档源
+ * 即为 file://，本地字体才允许加载。返回值用于清理临时文件。
+ */
+async function loadHtmlPage(page: Page, html: string): Promise<() => void> {
   await page.setViewport({
     width: RP_A4_WIDTH_PX,
     height: 900,
     deviceScaleFactor: 1,
   });
-  await page.setContent(html, {
-    waitUntil: 'domcontentloaded',
-    timeout: 60_000,
-  });
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-  });
+  const dir = mkdtempSync(join(tmpdir(), 'resume-export-'));
+  const file = join(dir, 'page.html');
+  writeFileSync(file, html, 'utf8');
+  const cleanup = () => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // 临时文件清理失败不应影响导出
+    }
+  };
+  try {
+    await page.goto(pathToFileURL(file).href, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60_000,
+    });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
+  return cleanup;
 }
 
 async function measurePreviewTotalHeight(page: Page): Promise<number> {
@@ -157,22 +192,26 @@ export async function renderResumeExportPartsToPdf(
   const browser = await launchBrowser();
   try {
     const measurePage = await openExportPage(browser);
+    let cleanupMeasure: (() => void) | null = null;
     try {
-      await loadHtmlPage(measurePage, measureHtml);
+      cleanupMeasure = await loadHtmlPage(measurePage, measureHtml);
       const totalHeight = await measurePreviewTotalHeight(measurePage);
       const layout = computePageLayoutFromTotalHeight(totalHeight);
       const paginatedHtml = buildPaginatedExportHtml(parts, layout.pages);
 
       const printPage = await openExportPage(browser);
+      let cleanupPrint: (() => void) | null = null;
       try {
-        await loadHtmlPage(printPage, paginatedHtml);
+        cleanupPrint = await loadHtmlPage(printPage, paginatedHtml);
         return await printLoadedPage(printPage);
       } finally {
+        cleanupPrint?.();
         if (!printPage.isClosed()) {
           await printPage.close();
         }
       }
     } finally {
+      cleanupMeasure?.();
       if (!measurePage.isClosed()) {
         await measurePage.close();
       }
@@ -187,10 +226,12 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
   const browser = await launchBrowser();
   try {
     const page = await openExportPage(browser);
+    let cleanup: (() => void) | null = null;
     try {
-      await loadHtmlPage(page, html);
+      cleanup = await loadHtmlPage(page, html);
       return await printLoadedPage(page);
     } finally {
+      cleanup?.();
       if (!page.isClosed()) {
         await page.close();
       }

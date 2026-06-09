@@ -10,7 +10,8 @@
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "build": "nest build && cp src/worker/render/resume-preview.css dist/worker/render/ && cp -R src/worker/render/fonts dist/worker/render/ 2>/dev/null || true",
+    "fetch-fonts": "node scripts/fetch-export-fonts.mjs",
+    "build": "pnpm fetch-fonts && nest build && cp src/worker/render/resume-preview.css dist/worker/render/ && cp -R worker/src/render/fonts dist/worker/render/",
     "predev": "pnpm -C packages/sqlite-pg build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -25,7 +26,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migrate": "node -r ./scripts/load-sqlite-env.cjs scripts/sqlite-migrate.cjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "pnpm --dir packages/sqlite-pg typecheck && pnpm --dir packages/sqlite-pg build && pnpm typecheck && pnpm build && pnpm --dir worker typecheck && pnpm --dir worker build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",

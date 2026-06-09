@@ -4,3 +4,6 @@ node_modules/
 dist/
 coverage/
 .DS_Store
+worker/src/render/fonts/*.ttf
+worker/src/render/fonts/*.otf
+worker/src/render/fonts/*.ttc

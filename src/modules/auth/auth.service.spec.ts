@@ -11,6 +11,7 @@ const baseUser = {
   plan: 'trial' as const,
   role: 'user' as const,
   disabled_at: null,
+  last_access_at: null,
   created_at: new Date(),
   updated_at: new Date(),
 };
