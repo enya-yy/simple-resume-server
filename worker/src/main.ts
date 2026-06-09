@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { runChatAssistJobStep } from "./chat-assist.worker.js";
 import { runExportJobStep } from "./export-pdf.worker.js";
 import { runPolishJobStep } from "./polish.worker.js";
+import { closeSharedBrowser } from "./render/renderPdf.js";
 
 function resolveSqlitePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -70,6 +71,7 @@ async function bootstrap() {
     clearInterval(exportTimer);
     clearInterval(polishTimer);
     clearInterval(chatTimer);
+    await closeSharedBrowser();
     await pool.close();
     process.exit(0);
   };

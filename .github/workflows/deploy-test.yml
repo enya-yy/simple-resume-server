@@ -194,6 +194,10 @@ jobs:
           # 测试机走 HTTP：session 须可写入非 Secure cookie，否则 CSRF / 登录恒为 403
           export SESSION_COOKIE_SECURE=false
           export TRUST_PROXY=true
+          # 大陆测试机：pnpm 走 npmmirror 拉包，规避 registry.npmjs.org 频繁超时。
+          # 只作用于这台远程机的构建；GitHub CI 的 build-gate 仍用默认 registry。
+          # lockfile 用 integrity 校验，换源不影响 --frozen-lockfile 一致性。
+          export npm_config_registry="https://registry.npmmirror.com"
 
           ENV_FILE="$TEST_SERVER_DIR/.env"
           touch "$ENV_FILE"
@@ -285,15 +289,19 @@ jobs:
             if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" PUPPETEER_EXECUTABLE_PATH="$exec_path" \
               pnpm_timeout 45 --dir "$WORKER_DIR" exec node --input-type=module -e "
               import puppeteer from 'puppeteer';
-              const path = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || puppeteer.executablePath();
-              const browser = await puppeteer.launch({
-                headless: true,
-                executablePath: path,
+              // 与 renderPdf.ts 一致：无显式路径走 chrome-headless-shell（轻量），
+              // 系统完整 Chrome 走新版 headless。
+              const envPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+              const headless = !envPath || /headless[-_]shell/i.test(envPath) ? 'shell' : true;
+              const opts = {
+                headless,
                 args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
                 timeout: 30000,
-              });
+              };
+              if (envPath) opts.executablePath = envPath;
+              const browser = await puppeteer.launch(opts);
               await browser.close();
-              console.log('[deploy] Chrome launch ok:', path);
+              console.log('[deploy] Chrome launch ok:', envPath || ('puppeteer-managed headless=' + headless));
             "; then
               return 0
             fi
@@ -309,7 +317,7 @@ jobs:
           ensure_puppeteer_chrome() {
             local chrome_path=""
 
-            # 优先 Puppeteer 缓存（Chrome for Testing），避免 Ubuntu snap 包装脚本。
+            # 优先 Puppeteer 缓存（chrome-headless-shell，更轻量），避免 Ubuntu snap 包装脚本。
             if puppeteer_cache_has_chrome; then
               echo "[deploy] Puppeteer Chrome already cached at $PUPPETEER_CACHE_DIR"
               remove_env PUPPETEER_EXECUTABLE_PATH
@@ -319,17 +327,17 @@ jobs:
               echo "[deploy] cached Chrome failed launch check; reinstalling"
             fi
 
-            echo "[deploy] installing Puppeteer Chrome via npmmirror (timeout 600s)"
+            echo "[deploy] installing chrome-headless-shell via npmmirror (timeout 600s)"
             if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
               PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
-              PUPPETEER_CHROME_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
-              pnpm_timeout 600 --dir "$WORKER_DIR" exec puppeteer browsers install chrome; then
-              echo "[deploy] puppeteer Chrome installed to $PUPPETEER_CACHE_DIR"
+              PUPPETEER_CHROME_HEADLESS_SHELL_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
+              pnpm_timeout 600 --dir "$WORKER_DIR" exec puppeteer browsers install chrome-headless-shell; then
+              echo "[deploy] chrome-headless-shell installed to $PUPPETEER_CACHE_DIR"
               remove_env PUPPETEER_EXECUTABLE_PATH
               if verify_chrome_launch; then
                 return 0
               fi
-              echo "[deploy] npmmirror Chrome failed launch check; trying system Chromium"
+              echo "[deploy] npmmirror chrome-headless-shell failed launch check; trying system Chromium"
             fi
 
             if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then

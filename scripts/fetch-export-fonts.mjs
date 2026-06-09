@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 const serverRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fontsDir = join(serverRoot, 'worker/src/render/fonts');
 
-const PER_URL_TIMEOUT_MS = 30_000;
+// 单镜像超时调短：大陆机直连/慢镜像会挂满超时；快速失败才能尽早 fallback 到下一个。
+const PER_URL_TIMEOUT_MS = 12_000;
 
 /**
  * 构建/部署时拉取，避免把 ~40MB 字体提交进 Git。
@@ -85,13 +86,11 @@ async function fetchFont({ name, urls }) {
   return false;
 }
 
-const failed = [];
-for (const font of FONTS) {
-  const ok = await fetchFont(font);
-  if (!ok) {
-    failed.push(font.name);
-  }
-}
+// 两个字体并行拉取（各自内部仍按镜像顺序 fallback），缩短整体 build 等待。
+const results = await Promise.all(
+  FONTS.map(async (font) => ({ name: font.name, ok: await fetchFont(font) })),
+);
+const failed = results.filter((r) => !r.ok).map((r) => r.name);
 
 if (failed.length > 0) {
   console.warn(
