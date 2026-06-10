@@ -161,7 +161,9 @@ jobs:
         run: |
           # shellcheck source=/dev/null
           source /tmp/ssh-deploy.sh
-          ssh_with_retry sshpass -e rsync -az --delete --no-owner --no-group --no-perms \
+          ssh_with_retry sshpass -e rsync -az --delete --human-readable \
+            --info=progress2,stats2 \
+            --no-owner --no-group --no-perms \
             -e "ssh -p $TEST_SSH_PORT $TEST_SSH_OPTIONS" \
             --exclude='.git/' \
             --exclude='.github/' \
@@ -171,6 +173,8 @@ jobs:
             --exclude='dist/' \
             --exclude='coverage/' \
             --exclude='data/' \
+            --exclude='local-db/' \
+            --exclude='local-tmp/' \
             --exclude='.DS_Store' \
             ./ "$TEST_SSH_USER@$TEST_SSH_HOST:$TEST_SERVER_DIR/"
 
