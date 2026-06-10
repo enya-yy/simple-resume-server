@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc -p tsconfig.json && cp src/render/resume-preview.css dist/render/",
+    "build": "tsc -p tsconfig.json && cp src/render/resume-preview.css dist/render/ && cp -R src/render/fonts dist/render/",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

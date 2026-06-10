@@ -7,3 +7,5 @@ coverage/
 worker/src/render/fonts/*.ttf
 worker/src/render/fonts/*.otf
 worker/src/render/fonts/*.ttc
+!worker/src/render/fonts/NotoSansSC.ttf
+!worker/src/render/fonts/NotoSerifSC.ttf
