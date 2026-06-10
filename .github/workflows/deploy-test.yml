@@ -323,6 +323,28 @@ jobs:
           ensure_puppeteer_chrome() {
             local chrome_path=""
 
+            if grep -q '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" 2>/dev/null; then
+              chrome_path="$(grep '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" | tail -1 | cut -d= -f2-)"
+              if chrome_is_usable_binary "$chrome_path"; then
+                echo "[deploy] using configured Chrome/Chromium at $chrome_path"
+                if verify_chrome_launch; then
+                  return 0
+                fi
+                echo "[deploy] configured Chrome failed launch check"
+                remove_env PUPPETEER_EXECUTABLE_PATH
+              fi
+            fi
+
+            if chrome_path="$(resolve_chrome_path)"; then
+              echo "[deploy] using system Chrome/Chromium at $chrome_path"
+              upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
+              if verify_chrome_launch; then
+                return 0
+              fi
+              echo "[deploy] system Chromium failed launch check"
+              remove_env PUPPETEER_EXECUTABLE_PATH
+            fi
+
             # 优先 Puppeteer 缓存（chrome-headless-shell，更轻量），避免 Ubuntu snap 包装脚本。
             if puppeteer_cache_has_chrome; then
               echo "[deploy] Puppeteer Chrome already cached at $PUPPETEER_CACHE_DIR"
@@ -353,15 +375,6 @@ jobs:
                 echo "[deploy] trying apt chromium deb (timeout 180s)"
                 timeout 180 sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends chromium || true
               fi
-            fi
-
-            if chrome_path="$(resolve_chrome_path)"; then
-              echo "[deploy] using system Chrome/Chromium at $chrome_path"
-              upsert_env PUPPETEER_EXECUTABLE_PATH "$chrome_path"
-              if verify_chrome_launch; then
-                return 0
-              fi
-              echo "[deploy] system Chromium failed launch check"
             fi
 
             echo "[deploy] ERROR: no Chromium binary available for PDF export"
@@ -474,11 +487,16 @@ jobs:
           NODE
           echo "[deploy] step: api build"
           pnpm_cmd build
+          test -s "$TEST_SERVER_DIR/dist/worker/render/fonts/NotoSansSC.ttf"
+          test -s "$TEST_SERVER_DIR/dist/worker/render/fonts/NotoSerifSC.ttf"
           echo "[deploy] step: sqlite migrate"
           pnpm_cmd migrate
 
           echo "[deploy] step: worker build"
           pnpm_cmd --dir "$WORKER_DIR" build
+          test -s "$WORKER_DIR/dist/render/fonts/NotoSansSC.ttf"
+          test -s "$WORKER_DIR/dist/render/fonts/NotoSerifSC.ttf"
+          echo "[deploy] bundled PDF fonts verified"
           echo "[deploy] step: ensure Chromium for PDF export"
           ensure_puppeteer_chrome
 
