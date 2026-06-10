@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "fetch-fonts": "node ../scripts/fetch-export-fonts.mjs",
-    "build": "pnpm fetch-fonts && tsc -p tsconfig.json && cp src/render/resume-preview.css dist/render/ && cp -R src/render/fonts dist/render/",
+    "build": "tsc -p tsconfig.json && cp src/render/resume-preview.css dist/render/",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

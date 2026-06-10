@@ -10,8 +10,7 @@
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "fetch-fonts": "node scripts/fetch-export-fonts.mjs",
-    "build": "pnpm fetch-fonts && nest build && cp src/worker/render/resume-preview.css dist/worker/render/ && cp -R worker/src/render/fonts dist/worker/render/",
+    "build": "nest build && cp src/worker/render/resume-preview.css dist/worker/render/",
     "predev": "pnpm -C packages/sqlite-pg build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

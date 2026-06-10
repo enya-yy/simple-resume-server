@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,15 +20,12 @@ describe('buildExportFontFaceCss', () => {
     }
   });
 
-  it('embeds the bundled variable font via file:// with a weight range', () => {
-    // 构建时由 scripts/fetch-export-fonts.mjs 拉取，不纳入 Git
-    expect(existsSync(join(fontsDir, 'NotoSansSC.ttf'))).toBe(true);
-
-    const css = buildExportFontFaceCss(renderDir);
-    expect(css).toContain('@font-face');
+  it('always emits a system CJK font-family fallback without bundled files', () => {
+    // 不再下载字体：没有可内嵌的文件时也要输出 font-family，靠系统已装的 Noto CJK。
+    const emptyRenderDir = mkdtempSync(join(tmpdir(), 'rp-fonts-'));
+    const css = buildExportFontFaceCss(emptyRenderDir);
     expect(css).toContain('font-family: "Noto Sans SC"');
-    expect(css).toContain('file://');
-    expect(css).toContain('font-weight: 100 900');
+    expect(css).toContain('"Noto Sans CJK SC"');
     expect(css).toContain('!important');
     expect(css).not.toContain('local("Noto Sans SC")');
   });

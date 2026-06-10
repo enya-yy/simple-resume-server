@@ -111,7 +111,11 @@ function fontFaceRule(params: {
 }`;
 }
 
-/** PDF 导出用本地字体文件，避免依赖 Google Fonts 或 local() 名称匹配。 */
+/**
+ * 字体策略：不再下载字体文件，直接用部署机系统安装的 Noto CJK（apt fonts-noto-cjk）。
+ * 若恰好在 bundled/系统目录找到字体文件则内嵌 @font-face（保真度更高）；找不到也
+ * 始终输出 font-family，让 Chrome 按名字匹配系统已装的 CJK 字体。
+ */
 export function buildExportFontFaceCss(renderDir: string): string {
   const rules: string[] = [];
   for (const spec of EXPORT_FONTS) {
@@ -129,11 +133,8 @@ export function buildExportFontFaceCss(renderDir: string): string {
       rules.push(fontFaceRule({ family: spec.family, url: boldUrl, weight: 700 }));
     }
   }
-  if (rules.length === 0) {
-    return '';
-  }
-  return `${rules.join('\n')}
-.rp-root,
+  const faceCss = rules.length > 0 ? `${rules.join('\n')}\n` : '';
+  return `${faceCss}.rp-root,
 .rp-root * {
   font-family: "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
 }
