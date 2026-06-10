@@ -175,6 +175,7 @@ jobs:
             --exclude='data/' \
             --exclude='local-db/' \
             --exclude='local-tmp/' \
+            --exclude='worker/.cache/' \
             --exclude='.DS_Store' \
             ./ "$TEST_SSH_USER@$TEST_SSH_HOST:$TEST_SERVER_DIR/"
 
@@ -240,6 +241,7 @@ jobs:
           PUPPETEER_CACHE_DIR="$WORKER_DIR/.cache/puppeteer"
           mkdir -p "$PUPPETEER_CACHE_DIR"
           upsert_env PUPPETEER_CACHE_DIR "$PUPPETEER_CACHE_DIR"
+          echo "[deploy] Puppeteer cache dir: $PUPPETEER_CACHE_DIR"
 
           PUPPETEER_MIRROR="https://cdn.npmmirror.com/binaries/chrome-for-testing"
 
