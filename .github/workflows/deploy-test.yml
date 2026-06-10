@@ -286,6 +286,17 @@ jobs:
             find "$PUPPETEER_CACHE_DIR" -type f \( -name chrome -o -name chrome-headless-shell \) -perm -111 2>/dev/null | grep -q .
           }
 
+          clean_broken_puppeteer_cache() {
+            local dir=""
+            for dir in "$PUPPETEER_CACHE_DIR"/chrome-headless-shell/linux-*; do
+              [ -d "$dir" ] || continue
+              if ! find "$dir" -type f -name chrome-headless-shell -perm -111 2>/dev/null | grep -q .; then
+                echo "[deploy] removing broken Puppeteer cache: $dir"
+                rm -rf "$dir"
+              fi
+            done
+          }
+
           verify_chrome_launch() {
             local exec_path=""
             if grep -q '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" 2>/dev/null; then
@@ -353,8 +364,10 @@ jobs:
                 return 0
               fi
               echo "[deploy] cached Chrome failed launch check; reinstalling"
+              clean_broken_puppeteer_cache
             fi
 
+            clean_broken_puppeteer_cache
             echo "[deploy] installing chrome-headless-shell via npmmirror (timeout 600s)"
             if PUPPETEER_CACHE_DIR="$PUPPETEER_CACHE_DIR" \
               PUPPETEER_DOWNLOAD_BASE_URL="$PUPPETEER_MIRROR" \
