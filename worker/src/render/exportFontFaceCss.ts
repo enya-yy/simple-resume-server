@@ -64,10 +64,9 @@ function bundledFontDirs(renderDir: string): string[] {
 }
 
 function resolveFontFileUrl(
-  renderDir: string,
+  dirs: string[],
   filenames: string[],
 ): string | null {
-  const dirs = [...bundledFontDirs(renderDir), ...SYSTEM_FONT_DIRS];
   for (const name of filenames) {
     for (const dir of dirs) {
       const candidate = join(dir, name);
@@ -79,18 +78,10 @@ function resolveFontFileUrl(
   return null;
 }
 
-function fontFormat(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.endsWith('.ttc') || lower.endsWith('.ttf')) {
-    return 'truetype';
-  }
-  return 'opentype';
-}
-
 function variableFontFaceRule(params: { family: string; url: string }): string {
   return `@font-face {
   font-family: "${params.family}";
-  src: url("${params.url}") format("${fontFormat(params.url)}");
+  src: url("${params.url}");
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
@@ -104,7 +95,7 @@ function fontFaceRule(params: {
 }): string {
   return `@font-face {
   font-family: "${params.family}";
-  src: url("${params.url}") format("${fontFormat(params.url)}");
+  src: url("${params.url}");
   font-weight: ${params.weight};
   font-style: normal;
   font-display: block;
@@ -118,19 +109,44 @@ function fontFaceRule(params: {
  */
 export function buildExportFontFaceCss(renderDir: string): string {
   const rules: string[] = [];
+  const bundledDirs = bundledFontDirs(renderDir);
   for (const spec of EXPORT_FONTS) {
-    const variableUrl = resolveFontFileUrl(renderDir, spec.variable);
+    const systemRegularUrl = resolveFontFileUrl(SYSTEM_FONT_DIRS, spec.regular);
+    const systemBoldUrl = resolveFontFileUrl(SYSTEM_FONT_DIRS, spec.bold);
+    if (systemRegularUrl || systemBoldUrl) {
+      if (systemRegularUrl) {
+        rules.push(
+          fontFaceRule({
+            family: spec.family,
+            url: systemRegularUrl,
+            weight: 400,
+          }),
+        );
+      }
+      if (systemBoldUrl) {
+        rules.push(
+          fontFaceRule({ family: spec.family, url: systemBoldUrl, weight: 700 }),
+        );
+      }
+      continue;
+    }
+
+    const variableUrl = resolveFontFileUrl(bundledDirs, spec.variable);
     if (variableUrl) {
       rules.push(variableFontFaceRule({ family: spec.family, url: variableUrl }));
       continue;
     }
-    const regularUrl = resolveFontFileUrl(renderDir, spec.regular);
-    const boldUrl = resolveFontFileUrl(renderDir, spec.bold);
+    const regularUrl = resolveFontFileUrl(bundledDirs, spec.regular);
+    const boldUrl = resolveFontFileUrl(bundledDirs, spec.bold);
     if (regularUrl) {
-      rules.push(fontFaceRule({ family: spec.family, url: regularUrl, weight: 400 }));
+      rules.push(
+        fontFaceRule({ family: spec.family, url: regularUrl, weight: 400 }),
+      );
     }
     if (boldUrl) {
-      rules.push(fontFaceRule({ family: spec.family, url: boldUrl, weight: 700 }));
+      rules.push(
+        fontFaceRule({ family: spec.family, url: boldUrl, weight: 700 }),
+      );
     }
   }
   const faceCss = rules.length > 0 ? `${rules.join('\n')}\n` : '';
